@@ -14,7 +14,7 @@ import "net/http"
 // Frontend can always check `success` before reading `data`.
 type Response[T any] struct {
 	Success bool   `json:"success"`
-	Data    T      `json:"data,omitempty"`
+	Data    T      `json:"data"`
 	Error   string `json:"error,omitempty"`
 	Meta    *Meta  `json:"meta,omitempty"`
 }

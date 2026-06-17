@@ -30,6 +30,11 @@ func main() {
 	movieService := services.NewMovieService(movieRepo)
 	movieHandler := handlers.NewMovieHandler(movieService)
 
+	// theatre service
+	theatreRepo := repositories.NewTheatreRepository(pool)
+	theatreService := services.NewTheatreService(theatreRepo)
+	theatreHandler := handlers.NewTheatreHandler(theatreService)
+
 	r := gin.Default()
 
 	// auth routes
@@ -59,6 +64,13 @@ func main() {
 		// for reviews
 		api.POST("/movies/:id/reviews", movieHandler.AddReview)
 		api.GET("/movies/:id/reviews", movieHandler.ListReviews)
+
+		// for theatres
+		api.GET("/theatres", theatreHandler.ListTheatres)
+		api.GET("/theatres/:id", theatreHandler.GetTheatre)
+		api.GET("/theatres/:id/halls", theatreHandler.GetHalls)
+		// api.POST("/theatres", theatreHandler.CreateTheatre)
+		// api.POST("/theatres/:id/halls", theatreHandler.CreateHall)
 
 	}
 

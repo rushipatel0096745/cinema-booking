@@ -9,7 +9,7 @@ type Theatre struct {
 	Lat     *float64 `json:"lat,omitempty"`
 	Lng     *float64 `json:"lng,omitempty"`
 	// Populated on demand
-	Halls []Hall `json:"halls,omitempty"`
+	Halls []Hall `json:"halls"`
 }
 
 // Hall is a single screen/auditorium within a theatre.
@@ -66,5 +66,7 @@ type CreateHallRequest struct {
 
 // TheatreFilter is used when listing theatres.
 type TheatreFilter struct {
-	City string
+	City  string
+	Page  int
+	Limit int
 }
