@@ -2,12 +2,12 @@ package domain
 
 // Theatre is a cinema complex that may contain multiple halls.
 type Theatre struct {
-	ID      string  `json:"id"`
-	Name    string  `json:"name"`
-	City    string  `json:"city"`
-	Address string  `json:"address,omitempty"`
-	Lat     float64 `json:"lat,omitempty"`
-	Lng     float64 `json:"lng,omitempty"`
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	City    string   `json:"city"`
+	Address string   `json:"address,omitempty"`
+	Lat     *float64 `json:"lat,omitempty"`
+	Lng     *float64 `json:"lng,omitempty"`
 	// Populated on demand
 	Halls []Hall `json:"halls,omitempty"`
 }

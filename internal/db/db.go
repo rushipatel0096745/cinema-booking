@@ -12,7 +12,7 @@ import (
 
 var Pool *pgxpool.Pool
 
-func Connect() {
+func Connect() *pgxpool.Pool {
 	// Search upwards for .env file starting from the working directory
 	dir, err := os.Getwd()
 	loaded := false
@@ -61,6 +61,8 @@ func Connect() {
 		log.Fatalf("unable to ping database: %v", err)
 	}
 
-	Pool = pool
 	log.Println("connected to Neon Postgres")
+	// store pool in global variable
+	Pool = pool
+	return pool
 }

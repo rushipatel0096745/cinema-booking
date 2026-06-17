@@ -15,8 +15,8 @@ type User struct {
 	Name         string    `json:"name"`
 	Phone        string    `json:"phone,omitempty"`
 	PasswordHash string    `json:"-"` // never serialised
-	GoogleID     string    `json:"-"`
-	AvatarURL    string    `json:"avatar_url,omitempty"`
+	GoogleID     string   `json:"-"`
+	AvatarURL    string   `json:"avatar_url,omitempty"`
 	Role         string    `json:"role"`
 	CreatedAt    time.Time `json:"created_at"`
 }
@@ -26,11 +26,15 @@ func (u *User) IsAdmin() bool { return u.Role == RoleAdmin }
 
 // PublicProfile returns a copy safe to expose in API responses.
 func (u *User) PublicProfile() UserProfile {
+	avatarURL := ""
+	if u.AvatarURL != "" {
+		avatarURL = u.AvatarURL
+	}
 	return UserProfile{
 		ID:        u.ID,
 		Name:      u.Name,
 		Email:     u.Email,
-		AvatarURL: u.AvatarURL,
+		AvatarURL: avatarURL,
 		Role:      u.Role,
 	}
 }
@@ -78,9 +82,9 @@ type UpdateProfileRequest struct {
 }
 
 type AuthResponse struct {
-	AccessToken  string      `json:"access_token"`
-	RefreshToken string      `json:"refresh_token"`
-	User         UserProfile `json:"user"`
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	User         User   `json:"user"`
 }
 
 type RefreshRequest struct {

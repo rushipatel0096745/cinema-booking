@@ -1,6 +1,8 @@
 package domain
 
-import "time"
+import (
+	"time"
+)
 
 // Showtime is a scheduled screening of a movie in a hall.
 type Showtime struct {
@@ -17,6 +19,21 @@ type Showtime struct {
 	Theatre     *Theatre `json:"theatre,omitempty"`
 	AvailSeats  int      `json:"available_seats,omitempty"`
 	BookedSeats int      `json:"booked_seats,omitempty"`
+}
+
+type MovieShowtimesResponse struct {
+    MovieID string          `json:"movie_id"`
+    Cities  []CityShowtimes `json:"cities"`
+}
+
+type CityShowtimes struct {
+    City     string             `json:"city"`
+    Theatres []TheatreShowtimes `json:"theatres"`
+}
+
+type TheatreShowtimes struct {
+    Theatre   Theatre  `json:"theatre"`
+    Showtimes []Showtime `json:"showtimes"`
 }
 
 // HasStarted reports whether the showtime has already begun.
