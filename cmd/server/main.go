@@ -15,6 +15,7 @@ import (
 	"log"
 	"strconv"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
 
@@ -99,6 +100,26 @@ func main() {
 	stripeWebhookHandler := handlers.NewWebhookHandler(bookingService)
 
 	r := gin.Default()
+
+	// CORS
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{
+			"http://localhost:5173", // Vite
+			"http://localhost:3000", // React
+		},
+		AllowMethods: []string{
+			"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS",
+		},
+		AllowHeaders: []string{
+			"Origin",
+			"Content-Type",
+			"Authorization",
+		},
+		ExposeHeaders: []string{
+			"Content-Length",
+		},
+		AllowCredentials: true,
+	}))
 
 	// auth routes
 	auth := r.Group("/auth")
