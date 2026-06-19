@@ -66,23 +66,24 @@ func (e *AppError) Error() string { return e.Message }
 
 // Pre-defined sentinel errors handlers can match with errors.Is / type assert.
 var (
-	ErrNotFound         = &AppError{Code: http.StatusNotFound,            Message: "resource not found"}
-	ErrUnauthorised     = &AppError{Code: http.StatusUnauthorized,        Message: "unauthorised"}
-	ErrForbidden        = &AppError{Code: http.StatusForbidden,           Message: "forbidden"}
-	ErrBadRequest       = &AppError{Code: http.StatusBadRequest,          Message: "bad request"}
-	ErrConflict         = &AppError{Code: http.StatusConflict,            Message: "conflict"}
-	ErrInternal         = &AppError{Code: http.StatusInternalServerError, Message: "internal server error"}
+	ErrNotFound     = &AppError{Code: http.StatusNotFound, Message: "resource not found"}
+	ErrUnauthorised = &AppError{Code: http.StatusUnauthorized, Message: "unauthorised"}
+	ErrForbidden    = &AppError{Code: http.StatusForbidden, Message: "forbidden"}
+	ErrBadRequest   = &AppError{Code: http.StatusBadRequest, Message: "bad request"}
+	ErrConflict     = &AppError{Code: http.StatusConflict, Message: "conflict"}
+	ErrInternal     = &AppError{Code: http.StatusInternalServerError, Message: "internal server error"}
 
 	// Domain-specific
-	ErrSeatAlreadyLocked   = &AppError{Code: http.StatusConflict, Message: "one or more seats are already locked or booked"}
-	ErrSeatNotAvailable    = &AppError{Code: http.StatusConflict, Message: "seat is not available"}
-	ErrLockExpired         = &AppError{Code: http.StatusGone,     Message: "seat lock has expired, please select again"}
-	ErrShowtimeStarted     = &AppError{Code: http.StatusConflict, Message: "showtime has already started"}
-	ErrCancelWindowPassed  = &AppError{Code: http.StatusConflict, Message: "cancellation window has passed (must be 2h before showtime)"}
-	ErrDuplicateReview     = &AppError{Code: http.StatusConflict, Message: "you have already reviewed this movie"}
-	ErrInvalidCredentials  = &AppError{Code: http.StatusUnauthorized, Message: "invalid email or password"}
-	ErrTokenExpired        = &AppError{Code: http.StatusUnauthorized, Message: "token has expired"}
-	ErrEmailTaken          = &AppError{Code: http.StatusConflict,    Message: "email is already registered"}
+	ErrSeatAlreadyLocked  = &AppError{Code: http.StatusConflict, Message: "one or more seats are already locked or booked"}
+	ErrBookingNotFound    = &AppError{Code: http.StatusConflict, Message: "Booking not found"}
+	ErrSeatNotAvailable   = &AppError{Code: http.StatusConflict, Message: "seat is not available"}
+	ErrLockExpired        = &AppError{Code: http.StatusGone, Message: "seat lock has expired, please select again"}
+	ErrShowtimeStarted    = &AppError{Code: http.StatusConflict, Message: "showtime has already started"}
+	ErrCancelWindowPassed = &AppError{Code: http.StatusConflict, Message: "cancellation window has passed (must be 2h before showtime)"}
+	ErrDuplicateReview    = &AppError{Code: http.StatusConflict, Message: "you have already reviewed this movie"}
+	ErrInvalidCredentials = &AppError{Code: http.StatusUnauthorized, Message: "invalid email or password"}
+	ErrTokenExpired       = &AppError{Code: http.StatusUnauthorized, Message: "token has expired"}
+	ErrEmailTaken         = &AppError{Code: http.StatusConflict, Message: "email is already registered"}
 )
 
 // NewAppError creates a custom AppError with a specific status and message.
@@ -109,4 +110,4 @@ func NormalisePage(page, limit int) (int, int) {
 		limit = DefaultLimit
 	}
 	return page, limit
-}	
+}

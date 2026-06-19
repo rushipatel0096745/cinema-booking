@@ -15,6 +15,7 @@ type TheatreRepository interface {
 	FindAll(ctx context.Context, filter domain.TheatreFilter) ([]domain.Theatre, int, error)
 	FindByID(ctx context.Context, id string) (*domain.Theatre, error)
 	FindHalls(ctx context.Context, theatreID string) ([]domain.Hall, error)
+	FindHallByID(ctx context.Context, hallID string) (*domain.Hall, error)
 	Create(ctx context.Context, theatre *domain.Theatre) (*domain.Theatre, error)
 	CreateHall(ctx context.Context, hall *domain.Hall) (*domain.Hall, error)
 }
@@ -100,6 +101,22 @@ func (r *theatreRepository) FindHalls(ctx context.Context, theatreID string) ([]
 		halls = append(halls, h)
 	}
 	return halls, rows.Err()
+}
+
+func (r *theatreRepository) FindHallByID(ctx context.Context, hallID string) (*domain.Hall, error) {
+	hall := &domain.Hall{}
+	err := r.db.QueryRow(ctx, `
+        SELECT id, theatre_id, name, total_rows, total_cols
+        FROM halls WHERE id = $1`, hallID,
+	).Scan(&hall.ID, &hall.TheatreID, &hall.Name, &hall.TotalRows, &hall.TotalCols)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+	hall.TotalSeats = hall.TotalRows * hall.TotalCols
+	return hall, nil
 }
 
 func (r *theatreRepository) Create(ctx context.Context, theatre *domain.Theatre) (*domain.Theatre, error) {

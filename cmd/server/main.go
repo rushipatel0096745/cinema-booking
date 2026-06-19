@@ -1,13 +1,19 @@
 package main
 
 import (
+	"cinemabooking/internal/cache"
 	"cinemabooking/internal/config"
 	"cinemabooking/internal/db"
 	handlers "cinemabooking/internal/handler"
 	"cinemabooking/internal/middleware"
+	"cinemabooking/internal/pkg/mailer"
+	"cinemabooking/internal/ws"
+
+	"cinemabooking/internal/payment"
 	repositories "cinemabooking/internal/repository"
 	services "cinemabooking/internal/service"
 	"log"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -19,6 +25,20 @@ func main() {
 	// connect to database
 	pool := db.Connect()
 	defer pool.Close()
+
+	// redis connection
+	dbNum, err := strconv.Atoi(cfg.RedisDB)
+	if err != nil {
+		log.Fatalf("invalid Redis DB number: %v", err)
+	}
+	redisClient, err := cache.NewRedisClient(cfg.RedisAddr, cfg.RedisPassword, dbNum)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer redisClient.Close()
+
+	// stripe client
+	stripeClient := payment.NewStripeClient(cfg.StripeSecretKey)
 
 	// user auth service
 	userRepo := repositories.NewUserRepository(pool)
@@ -35,6 +55,49 @@ func main() {
 	theatreService := services.NewTheatreService(theatreRepo)
 	theatreHandler := handlers.NewTheatreHandler(theatreService)
 
+	// showtime service
+	showtimeRepo := repositories.NewShowtimeRepository(pool)
+	showtimeService := services.NewShowtimeService(showtimeRepo, movieRepo, theatreRepo)
+	showtimeHandler := handlers.NewShowtimeHandler(showtimeService)
+
+	// booking service
+	bookingRepo := repositories.NewBookingRepository(pool)
+	showtimeSeatRepo := repositories.NewShowtimeSeatRepository(pool)
+	lockRepo := repositories.NewSeatLockRepository(redisClient)
+
+	// mailer service
+	mailerSvc := mailer.New(
+		cfg.ResendApiKey,
+		cfg.FromEmail,
+		"CinemaBook",
+	)
+
+	// ws hub
+	hub := ws.NewHub()
+	go hub.Run()
+
+	wsHandler := ws.NewHandler(hub)
+
+	bookingService := services.NewBookingService(
+		bookingRepo,
+		*userRepo,
+		*showtimeRepo,
+		showtimeSeatRepo,
+		lockRepo,
+		stripeClient,
+		cfg.StripePublishableKey,
+		services.NewStripeService(stripeClient, cfg.StripePublishableKey),
+		hub,
+		mailerSvc,
+	)
+
+	bookingHandler := handlers.NewBookingHandler(
+		bookingService,
+	)
+
+	// stripe
+	stripeWebhookHandler := handlers.NewWebhookHandler(bookingService)
+
 	r := gin.Default()
 
 	// auth routes
@@ -48,6 +111,8 @@ func main() {
 		auth.GET("/google/callback", authHandler.GoogleCallback)
 	}
 
+	r.GET("/ws/showtimes/:id", wsHandler.ServeWS)
+
 	// protected routes
 	api := r.Group("/api", middleware.AuthMiddleware(authService))
 	{
@@ -56,9 +121,9 @@ func main() {
 		// for movie
 		api.GET("/movies", movieHandler.ListMovies)
 		api.GET("/movies/:id", movieHandler.GetMovie)
-		// api.POST("/movies", movieHandler.CreateMovie)
-		// api.PUT("/movies/:id", movieHandler.UpdateMovie)
-		// api.DELETE("/movies/:id", movieHandler.DeleteMovie)
+		api.POST("/movies", movieHandler.CreateMovie)
+		api.PUT("/movies/:id", movieHandler.UpdateMovie)
+		api.DELETE("/movies/:id", movieHandler.DeleteMovie)
 		api.GET("/movies/:id/showtimes", movieHandler.GetShowtimes)
 
 		// for reviews
@@ -69,8 +134,27 @@ func main() {
 		api.GET("/theatres", theatreHandler.ListTheatres)
 		api.GET("/theatres/:id", theatreHandler.GetTheatre)
 		api.GET("/theatres/:id/halls", theatreHandler.GetHalls)
-		// api.POST("/theatres", theatreHandler.CreateTheatre)
-		// api.POST("/theatres/:id/halls", theatreHandler.CreateHall)
+		api.POST("/theatres", theatreHandler.CreateTheatre)
+		api.POST("/theatres/:id/halls", theatreHandler.CreateHall)
+		// upadate and delete later for theatre
+
+		// Showtimes
+		api.GET("/showtimes", showtimeHandler.ListShowtimes)
+		api.GET("/showtimes/:id", showtimeHandler.GetShowtime)
+		api.GET("/showtimes/:id/seats", showtimeHandler.GetSeatMap)
+		api.POST("/showtimes", showtimeHandler.CreateShowtime)
+		api.PUT("/showtimes/:id", showtimeHandler.UpdateShowtime)
+		api.DELETE("/showtimes/:id", showtimeHandler.DeleteShowtime)
+
+		// Booking
+		api.GET("/bookings", bookingHandler.GetUserBookings)
+		api.GET("/bookings/:id", bookingHandler.GetBooking)
+		api.POST("/bookings/lock-seats", bookingHandler.LockSeats)
+		api.POST("/bookings", bookingHandler.CreateBooking)
+		api.POST("/bookings/:id/cancel", bookingHandler.CancelBooking)
+
+		// stripe
+		api.POST("/webhook/stripe", stripeWebhookHandler.StripeWebhook)
 
 	}
 

@@ -32,9 +32,11 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -64,6 +66,60 @@ func (r *ShowtimeRepository) FindByID(ctx context.Context, id string) (*domain.S
 		}
 		return nil, err
 	}
+	return &st, nil
+}
+
+func (r *ShowtimeRepository) FindByIDWithDetails(ctx context.Context, id string) (*domain.Showtime, error) {
+	var st domain.Showtime
+	var movie domain.Movie
+	var hall domain.Hall
+	var theatre domain.Theatre
+
+	// nullable columns
+	var (
+		moviePoster  pgtype.Text
+		movieTrailer pgtype.Text
+		theatreAddr  pgtype.Text
+	)
+
+	err := r.db.QueryRow(ctx, `
+		SELECT
+			s.id, s.movie_id, s.hall_id, s.starts_at, s.ends_at, s.base_price, s.is_active,
+			COUNT(*) FILTER (WHERE ss.status = 'available') AS avail_seats,
+			COUNT(*) FILTER (WHERE ss.status = 'booked')    AS booked_seats,
+			m.id, m.title, m.description, m.duration_mins, m.language, m.poster_url, m.trailer_url, m.rating,
+			h.id, h.name, h.total_rows, h.total_cols,
+			t.id, t.name, t.city, t.address
+		FROM showtimes s
+		LEFT JOIN showtime_seats ss ON ss.showtime_id = s.id
+		JOIN movies   m ON m.id = s.movie_id
+		JOIN halls    h ON h.id = s.hall_id
+		JOIN theatres t ON t.id = h.theatre_id
+		WHERE s.id = $1
+		GROUP BY s.id, m.id, h.id, t.id`, id,
+	).Scan(
+		&st.ID, &st.MovieID, &st.HallID, &st.StartsAt, &st.EndsAt, &st.BasePrice, &st.IsActive,
+		&st.AvailSeats, &st.BookedSeats,
+		&movie.ID, &movie.Title, &movie.Description, &movie.DurationMin, &movie.Language, &moviePoster, &movieTrailer, &movie.Rating,
+		&hall.ID, &hall.Name, &hall.TotalRows, &hall.TotalCols,
+		&theatre.ID, &theatre.Name, &theatre.City, &theatreAddr,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	movie.PosterURL = moviePoster.String
+	movie.TrailerURL = movieTrailer.String
+	theatre.Address = theatreAddr.String
+	hall.TotalSeats = hall.TotalRows * hall.TotalCols
+
+	st.Movie = &movie
+	st.Hall = &hall
+	st.Theatre = &theatre
+
 	return &st, nil
 }
 
@@ -266,4 +322,34 @@ func (r *ShowtimeRepository) FindSeatMap(ctx context.Context, showtimeID string)
 	}
 
 	return seatMap, nil
+}
+
+func (r *ShowtimeRepository) HasConflict(ctx context.Context, hallID string, startsAt, endsAt time.Time, excludeID *string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, `
+		SELECT EXISTS (
+			SELECT 1
+			FROM showtimes
+			WHERE hall_id = $1
+			AND ($2::uuid IS NULL OR id != $2::uuid)
+			AND is_active = TRUE
+			AND starts_at < $4
+			AND ends_at > $3
+		)`,
+		hallID, excludeID, startsAt, endsAt,
+	).Scan(&exists)
+	return exists, err
+}
+
+func (r *ShowtimeRepository) HasConfirmedBookings(ctx context.Context, showtimeID string) (bool, error) {
+	var exists bool
+	err := r.db.QueryRow(ctx, `
+        SELECT EXISTS (
+            SELECT 1 FROM bookings
+            WHERE showtime_id = $1
+              AND status      = 'confirmed'
+        )`,
+		showtimeID,
+	).Scan(&exists)
+	return exists, err
 }

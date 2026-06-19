@@ -195,6 +195,21 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	}))
 }
 
+func (h *AuthHandler) GetUserProfile(c *gin.Context) {
+	userId := c.GetString("user_id")
+	user, err := h.authService.GetUserProfile(c.Request.Context(), userId)
+	if err != nil {
+		if errors.Is(err, repositories.ErrNotFound) {
+			c.JSON(http.StatusNotFound, domain.Fail[any]("user not found"))
+			return
+		}
+		c.JSON(http.StatusInternalServerError, domain.Fail[any](err.Error()))
+		return
+	}
+
+	c.JSON(http.StatusOK, domain.OK(user))
+}
+
 func (h *AuthHandler) Me(c *gin.Context) {
 	// UserID is set by the auth middleware
 	userID := c.GetString("user_id")

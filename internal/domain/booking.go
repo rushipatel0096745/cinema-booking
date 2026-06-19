@@ -1,6 +1,9 @@
 package domain
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 // Booking status constants
 const (
@@ -29,13 +32,31 @@ type Booking struct {
 
 // IsCancellable returns true if the booking can still be cancelled.
 // Business rule: cancellable up to 2 hours before the show.
+// func (b *Booking) IsCancellable() bool {
+// 	if b.Status != BookingStatusConfirmed {
+// 		return false
+// 	}
+// 	if b.Showtime == nil {
+// 		return false
+// 	}
+// 	return time.Now().Before(b.Showtime.StartsAt.Add(-2 * time.Hour))
+// }
+
 func (b *Booking) IsCancellable() bool {
 	if b.Status != BookingStatusConfirmed {
+		fmt.Println("status not confirmed")
 		return false
 	}
+
 	if b.Showtime == nil {
+		fmt.Println("showtime nil")
 		return false
 	}
+
+	fmt.Println("showtime starts at:", b.Showtime.StartsAt)
+	fmt.Println("cutoff:", b.Showtime.StartsAt.Add(-2*time.Hour))
+	fmt.Println("now:", time.Now())
+
 	return time.Now().Before(b.Showtime.StartsAt.Add(-2 * time.Hour))
 }
 
@@ -77,10 +98,11 @@ type CreateBookingRequest struct {
 // so the frontend can complete payment using Stripe.js / React Native Stripe SDK.
 type CreateBookingResponse struct {
 	BookingID            string  `json:"booking_id"`
-	ClientSecret         string  `json:"client_secret"` // Stripe PaymentIntent client_secret
-	TotalAmount          float64 `json:"total_amount"`
-	Currency             string  `json:"currency"` // "inr"
-	StripePublishableKey string  `json:"stripe_publishable_key"`
+	PaymentIntentID      string  `json:"payment_intent_id"`      // Stripe PaymentIntent ID (e.g. pi_...)
+	ClientSecret         string  `json:"client_secret"`          // Stripe PaymentIntent client_secret
+	TotalAmount          float64 `json:"total_amount"`           // e.g. 1250.0
+	Currency             string  `json:"currency"`               // "inr"
+	StripePublishableKey string  `json:"stripe_publishable_key"` // your publishable key for the frontend
 }
 
 // CancelBookingRequest carries optional cancellation reason.

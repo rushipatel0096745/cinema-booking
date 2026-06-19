@@ -101,6 +101,19 @@ func (s *AuthService) HandleGoogleUser(ctx context.Context, googleUser *domain.U
 	return s.issueTokenPair(ctx, user)
 }
 
+func (s *AuthService) GetUserProfile(ctx context.Context, userID string) (*domain.UserProfile, error) {
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &domain.UserProfile{
+		Email:     user.Email,
+		Name:      user.Name,
+		Role:      user.Role,
+		AvatarURL: user.AvatarURL,
+	}, nil
+}
+
 // RefreshTokens validates a refresh token and issues a new pair (rotation)
 func (s *AuthService) RefreshTokens(ctx context.Context, rawRefreshToken string) (*domain.AuthResponse, error) {
 	tokenHash := hashToken(rawRefreshToken)

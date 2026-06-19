@@ -22,18 +22,18 @@ type Showtime struct {
 }
 
 type MovieShowtimesResponse struct {
-    MovieID string          `json:"movie_id"`
-    Cities  []CityShowtimes `json:"cities"`
+	MovieID string          `json:"movie_id"`
+	Cities  []CityShowtimes `json:"cities"`
 }
 
 type CityShowtimes struct {
-    City     string             `json:"city"`
-    Theatres []TheatreShowtimes `json:"theatres"`
+	City     string             `json:"city"`
+	Theatres []TheatreShowtimes `json:"theatres"`
 }
 
 type TheatreShowtimes struct {
-    Theatre   Theatre  `json:"theatre"`
-    Showtimes []Showtime `json:"showtimes"`
+	Theatre   Theatre    `json:"theatre"`
+	Showtimes []Showtime `json:"showtimes"`
 }
 
 // HasStarted reports whether the showtime has already begun.
@@ -133,4 +133,12 @@ type ShowtimeListResponse struct {
 	Total     int        `json:"total"`
 	Page      int        `json:"page"`
 	Limit     int        `json:"limit"`
+}
+
+type SeatUnavailableError struct {
+	Seats []string `json:"seats"`
+}
+
+func (e *SeatUnavailableError) Error() string {
+	return "one or more seats already booked"
 }
