@@ -57,7 +57,8 @@ func (h *AuthHandler) Register(c *gin.Context) {
 
 		c.JSON(
 			http.StatusInternalServerError,
-			domain.Fail[any]("registration failed"),
+			// domain.Fail[any]("registration failed"),
+			domain.Fail[any](err.Error()),
 		)
 		return
 	}

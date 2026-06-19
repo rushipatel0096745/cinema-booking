@@ -107,7 +107,7 @@ func (r *UserRepository) FindByID(ctx context.Context, id string) (*domain.User,
 
 func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 	return r.db.QueryRow(ctx,
-		`INSERT INTO users (email, name, phone, avatar_url, password_hash, google_id, role, created_at)
+		`INSERT INTO users (email, name, phone, avatar_url, password_hash, google_id, role)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
          RETURNING id, created_at`,
 		user.Email, user.Name, user.Phone, user.AvatarURL, user.PasswordHash, user.GoogleID, user.Role,
