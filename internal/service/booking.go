@@ -72,6 +72,24 @@ func (s *BookingService) GetBooking(ctx context.Context, bookingID string, userI
 		return nil, domain.ErrForbidden
 	}
 
+	// Robust fallback: If webhook didn't hit (e.g. local dev without stripe listen), 
+	// sync status from Stripe manually before returning.
+	// if booking.Status == domain.BookingStatusPending && booking.StripePaymentIntent != "" {
+	// 	intent, err := s.stripeClient.V1PaymentIntents.Get(ctx, booking.StripePaymentIntent, nil)
+	// 	if err == nil {
+	// 		if string(intent.Status) == "succeeded" {
+	// 			if err := s.HandlePaymentSuccess(ctx, intent.ID); err == nil {
+	// 				booking.Status = domain.BookingStatusConfirmed
+	// 			} else {
+	// 				slog.Error("failed to sync payment success", "booking_id", booking.ID, "error", err)
+	// 			}
+	// 		} else if string(intent.Status) == "canceled" {
+	// 			_ = s.HandlePaymentFailed(ctx, intent.ID)
+	// 			booking.Status = domain.BookingStatusCancelled
+	// 		}
+	// 	}
+	// }
+
 	showtime, err := s.showtimeRepo.FindByID(ctx, booking.ShowtimeID)
 	if err != nil {
 		return nil, domain.NewAppError(http.StatusNotFound, "showtime not found")
@@ -375,16 +393,19 @@ func (s *BookingService) HandlePaymentSuccess(ctx context.Context, paymentIntent
 		seatIDs = append(seatIDs, seat.ShowtimeSeatID)
 	}
 
+	fmt.Print("updating seats status in showtime..........")
 	_, err = s.showtimeSeatRepo.MarkBooked(ctx, booking.ShowtimeID, seatIDs)
 	if err != nil {
 		return err
 	}
-
+	
+	fmt.Print("updating booking status in bookings..........")
 	err = s.bookingRepo.MarkConfirmed(ctx, paymentIntentID)
 	if err != nil {
 		return err
 	}
 
+	fmt.Println("releasing seats in redis.........")
 	err = s.lockRepo.ReleaseSeats(ctx, booking.ShowtimeID, seatIDs)
 	if err != nil {
 		return err

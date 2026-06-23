@@ -97,7 +97,7 @@ func main() {
 	)
 
 	// stripe
-	stripeWebhookHandler := handlers.NewWebhookHandler(bookingService)
+	stripeWebhookHandler := handlers.NewWebhookHandler(bookingService, cfg.StripeWebhookSecret)
 
 	r := gin.Default()
 
@@ -120,6 +120,9 @@ func main() {
 		},
 		AllowCredentials: true,
 	}))
+
+	// stripe
+	r.POST("/api/webhook/stripe", stripeWebhookHandler.StripeWebhook)
 
 	// auth routes
 	auth := r.Group("/auth")
@@ -173,9 +176,6 @@ func main() {
 		api.POST("/bookings/lock-seats", bookingHandler.LockSeats)
 		api.POST("/bookings", bookingHandler.CreateBooking)
 		api.POST("/bookings/:id/cancel", bookingHandler.CancelBooking)
-
-		// stripe
-		api.POST("/webhook/stripe", stripeWebhookHandler.StripeWebhook)
 
 	}
 

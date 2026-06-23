@@ -27,6 +27,7 @@ type Config struct {
 	StripePublishableKey string
 	ResendApiKey         string
 	FromEmail            string
+	StripeWebhookSecret  string
 }
 
 func Load() *Config {
@@ -60,6 +61,7 @@ func Load() *Config {
 		StripeSecretKey:      getEnv("STRIPE_SECRET_KEY", ""),
 		ResendApiKey:         getEnv("RESEND_API_KEY", ""),
 		FromEmail:            getEnv("FROM_EMAIL", ""),
+		StripeWebhookSecret:  getEnv("STRIPE_WEBHOOK_SECRET", ""),
 	}
 }
 
