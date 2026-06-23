@@ -28,6 +28,9 @@ type Config struct {
 	ResendApiKey         string
 	FromEmail            string
 	StripeWebhookSecret  string
+	CloudinaryApiKey     string
+	CloudinaryApiSecret  string
+	CloudinaryCloudName  string
 }
 
 func Load() *Config {
@@ -60,8 +63,11 @@ func Load() *Config {
 		StripePublishableKey: getEnv("STRIPE_PUBLISHABLE_KEY", ""),
 		StripeSecretKey:      getEnv("STRIPE_SECRET_KEY", ""),
 		ResendApiKey:         getEnv("RESEND_API_KEY", ""),
-		FromEmail:            getEnv("FROM_EMAIL", ""),
+		FromEmail:            getEnv("FROM_EMAIL", "onboarding@resend.dev"),
 		StripeWebhookSecret:  getEnv("STRIPE_WEBHOOK_SECRET", ""),
+		CloudinaryApiKey:     getEnv("CLOUDINARY_API_KEY", ""),
+		CloudinaryApiSecret:  getEnv("CLOUDINARY_API_SECRET", ""),
+		CloudinaryCloudName:  getEnv("CLOUDINARY_CLOUD_NAME", ""),
 	}
 }
 

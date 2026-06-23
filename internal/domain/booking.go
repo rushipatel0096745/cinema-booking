@@ -1,6 +1,7 @@
 package domain
 
 import (
+	// "cinemabooking/internal/domain"
 	"fmt"
 	"time"
 )
@@ -19,7 +20,7 @@ type Booking struct {
 	UserID              string     `json:"user_id"`
 	ShowtimeID          string     `json:"showtime_id"`
 	Status              string     `json:"status"`
-	TotalAmount         float64    `json:"total_amount"`
+	// TotalAmount         float64    `json:"total_amount"`
 	StripePaymentIntent string     `json:"stripe_payment_intent_id,omitempty"`
 	QRCodeURL           string     `json:"qr_code_url,omitempty"`
 	CreatedAt           time.Time  `json:"created_at"`
@@ -28,6 +29,10 @@ type Booking struct {
 	Seats    []BookedSeat `json:"seats,omitempty"`
 	Showtime *Showtime    `json:"showtime,omitempty"`
 	User     *UserProfile `json:"user,omitempty"`
+	Subtotal       float64 `json:"subtotal"`
+	ConvenienceFee float64 `json:"convenience_fee"`
+	Taxes          float64 `json:"taxes"`
+	TotalAmount    float64 `json:"total_amount"` // grand total
 }
 
 // IsCancellable returns true if the booking can still be cancelled.
@@ -103,6 +108,7 @@ type CreateBookingResponse struct {
 	TotalAmount          float64 `json:"total_amount"`           // e.g. 1250.0
 	Currency             string  `json:"currency"`               // "inr"
 	StripePublishableKey string  `json:"stripe_publishable_key"` // your publishable key for the frontend
+	Breakdown            *PriceSummary `json:"breakdown"`
 }
 
 // CancelBookingRequest carries optional cancellation reason.

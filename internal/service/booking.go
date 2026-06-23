@@ -3,6 +3,8 @@ package services
 import (
 	"cinemabooking/internal/domain"
 	"cinemabooking/internal/pkg/mailer"
+	"cinemabooking/internal/pkg/qr"
+	"cinemabooking/internal/pkg/storage"
 	repositories "cinemabooking/internal/repository"
 	"cinemabooking/internal/ws"
 	"context"
@@ -28,6 +30,8 @@ type BookingService struct {
 	publishableKey string
 	stripeService  StripeService
 	hub            *ws.Hub
+	qrService      *qr.Service
+	storageService *storage.Service
 }
 
 func NewBookingService(
@@ -41,6 +45,8 @@ func NewBookingService(
 	stripeService StripeService,
 	hub *ws.Hub,
 	mailer *mailer.Service,
+	qrService *qr.Service,
+	storageService *storage.Service,
 ) *BookingService {
 	return &BookingService{
 		bookingRepo:      bookingRepo,
@@ -53,6 +59,8 @@ func NewBookingService(
 		stripeService:    stripeService,
 		hub:              hub,
 		mailer:           mailer,
+		qrService:        qrService,
+		storageService:   storageService,
 	}
 }
 
@@ -72,25 +80,7 @@ func (s *BookingService) GetBooking(ctx context.Context, bookingID string, userI
 		return nil, domain.ErrForbidden
 	}
 
-	// Robust fallback: If webhook didn't hit (e.g. local dev without stripe listen), 
-	// sync status from Stripe manually before returning.
-	// if booking.Status == domain.BookingStatusPending && booking.StripePaymentIntent != "" {
-	// 	intent, err := s.stripeClient.V1PaymentIntents.Get(ctx, booking.StripePaymentIntent, nil)
-	// 	if err == nil {
-	// 		if string(intent.Status) == "succeeded" {
-	// 			if err := s.HandlePaymentSuccess(ctx, intent.ID); err == nil {
-	// 				booking.Status = domain.BookingStatusConfirmed
-	// 			} else {
-	// 				slog.Error("failed to sync payment success", "booking_id", booking.ID, "error", err)
-	// 			}
-	// 		} else if string(intent.Status) == "canceled" {
-	// 			_ = s.HandlePaymentFailed(ctx, intent.ID)
-	// 			booking.Status = domain.BookingStatusCancelled
-	// 		}
-	// 	}
-	// }
-
-	showtime, err := s.showtimeRepo.FindByID(ctx, booking.ShowtimeID)
+	showtime, err := s.showtimeRepo.FindByIDWithDetails(ctx, booking.ShowtimeID)
 	if err != nil {
 		return nil, domain.NewAppError(http.StatusNotFound, "showtime not found")
 	}
@@ -126,7 +116,7 @@ func (s *BookingService) CancelBooking(ctx context.Context, bookingID string, us
 		return domain.NewAppError(http.StatusConflict, "only confirmed bookings can be cancelled")
 	}
 
-	showtime, err := s.showtimeRepo.FindByID(ctx, booking.ShowtimeID)
+	showtime, err := s.showtimeRepo.FindByIDWithDetails(ctx, booking.ShowtimeID)
 	if err != nil {
 		return domain.NewAppError(http.StatusNotFound, "showtime not found")
 	}
@@ -264,103 +254,193 @@ func (s *BookingService) LockSeats(ctx context.Context, userID string, req domai
 	}, nil
 }
 
+// func (s *BookingService) CreateBooking(ctx context.Context, userID string, showtimeID string, seatIDs []string) (*domain.CreateBookingResponse, error) {
+
+// 	for _, seatID := range seatIDs {
+
+// 		owner, err := s.lockRepo.GetLockOwner(
+// 			ctx,
+// 			showtimeID,
+// 			seatID,
+// 		)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+
+// 		if owner != userID {
+// 			return nil, errors.New("seat lock expired or not owned by user")
+// 		}
+// 	}
+
+// 	// Load seats
+// 	seats, err := s.showtimeSeatRepo.GetByIDs(
+// 		ctx,
+// 		showtimeID,
+// 		seatIDs,
+// 	)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	if len(seats) != len(seatIDs) {
+// 		return nil, errors.New("one or more seats not found")
+// 	}
+
+// 	var total float64
+
+// 	bookedSeats := make(
+// 		[]domain.BookedSeat,
+// 		0,
+// 		len(seats),
+// 	)
+
+// 	for _, seat := range seats {
+
+// 		total += seat.Price
+
+// 		bookedSeats = append(
+// 			bookedSeats,
+// 			domain.BookedSeat{
+// 				ShowtimeSeatID: seat.ID,
+// 				Price:          seat.Price,
+// 				RowLabel:       seat.RowLabel,
+// 				ColNumber:      seat.ColNumber,
+// 				SeatType:       seat.SeatType,
+// 			},
+// 		)
+// 	}
+
+// 	booking := &domain.Booking{
+// 		ID:          uuid.NewString(),
+// 		UserID:      userID,
+// 		ShowtimeID:  showtimeID,
+// 		Status:      domain.BookingStatusPending,
+// 		TotalAmount: total,
+// 		CreatedAt:   time.Now(),
+// 	}
+
+// 	for i := range bookedSeats {
+// 		bookedSeats[i].BookingID = booking.ID
+// 	}
+
+// 	// Save booking + booking seats
+// 	if err := s.bookingRepo.Create(
+// 		ctx,
+// 		booking,
+// 		bookedSeats,
+// 	); err != nil {
+// 		return nil, err
+// 	}
+
+// 	// Create Stripe PaymentIntent
+// 	paymentResp, err := s.stripeService.CreatePaymentIntent(
+// 		ctx,
+// 		booking,
+// 	)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	// Store PaymentIntent ID
+// 	if err := s.bookingRepo.StorePaymentIntent(
+// 		ctx,
+// 		booking.ID,
+// 		paymentResp.PaymentIntentID,
+// 	); err != nil {
+// 		return nil, err
+// 	}
+
+// 	return paymentResp, nil
+// }
+
 func (s *BookingService) CreateBooking(ctx context.Context, userID string, showtimeID string, seatIDs []string) (*domain.CreateBookingResponse, error) {
 
+	// verify all seat locks are owned by this user
 	for _, seatID := range seatIDs {
-
-		owner, err := s.lockRepo.GetLockOwner(
-			ctx,
-			showtimeID,
-			seatID,
-		)
+		owner, err := s.lockRepo.GetLockOwner(ctx, showtimeID, seatID)
 		if err != nil {
 			return nil, err
 		}
-
 		if owner != userID {
-			return nil, errors.New("seat lock expired or not owned by user")
+			return nil, domain.ErrLockExpired
 		}
 	}
 
-	// Load seats
-	seats, err := s.showtimeSeatRepo.GetByIDs(
-		ctx,
-		showtimeID,
-		seatIDs,
-	)
+	// load seats
+	seats, err := s.showtimeSeatRepo.GetByIDs(ctx, showtimeID, seatIDs)
 	if err != nil {
 		return nil, err
 	}
-
 	if len(seats) != len(seatIDs) {
 		return nil, errors.New("one or more seats not found")
 	}
 
-	var total float64
-
-	bookedSeats := make(
-		[]domain.BookedSeat,
-		0,
-		len(seats),
-	)
+	// build price summary
+	summary := &domain.PriceSummary{}
+	bookedSeats := make([]domain.BookedSeat, 0, len(seats))
 
 	for _, seat := range seats {
-
-		total += seat.Price
-
-		bookedSeats = append(
-			bookedSeats,
-			domain.BookedSeat{
-				ShowtimeSeatID: seat.ID,
-				Price:          seat.Price,
-				RowLabel:       seat.RowLabel,
-				ColNumber:      seat.ColNumber,
-				SeatType:       seat.SeatType,
-			},
-		)
+		summary.Items = append(summary.Items, domain.PriceLineItem{
+			ShowtimeSeatID: seat.ID,
+			RowLabel:       seat.RowLabel,
+			ColNumber:      seat.ColNumber,
+			SeatType:       seat.SeatType,
+			BasePrice:      seat.Price,
+		})
+		bookedSeats = append(bookedSeats, domain.BookedSeat{
+			ShowtimeSeatID: seat.ID,
+			Price:          seat.Price,
+			RowLabel:       seat.RowLabel,
+			ColNumber:      seat.ColNumber,
+			SeatType:       seat.SeatType,
+		})
 	}
 
+	// compute subtotal + convenience fee + GST in one call
+	summary.ComputeTotal()
+
 	booking := &domain.Booking{
-		ID:          uuid.NewString(),
-		UserID:      userID,
-		ShowtimeID:  showtimeID,
-		Status:      domain.BookingStatusPending,
-		TotalAmount: total,
-		CreatedAt:   time.Now(),
+		ID:             uuid.NewString(),
+		UserID:         userID,
+		ShowtimeID:     showtimeID,
+		Status:         domain.BookingStatusPending,
+		Subtotal:       summary.SubTotal,
+		ConvenienceFee: summary.ConvenienceFee,
+		Taxes:          summary.Taxes,
+		TotalAmount:    summary.Total,
+		CreatedAt:      time.Now(),
 	}
 
 	for i := range bookedSeats {
 		bookedSeats[i].BookingID = booking.ID
 	}
 
-	// Save booking + booking seats
-	if err := s.bookingRepo.Create(
-		ctx,
-		booking,
-		bookedSeats,
-	); err != nil {
+	// save booking + seats
+	if err := s.bookingRepo.Create(ctx, booking, bookedSeats); err != nil {
 		return nil, err
 	}
 
-	// Create Stripe PaymentIntent
-	paymentResp, err := s.stripeService.CreatePaymentIntent(
-		ctx,
-		booking,
-	)
+	// create Stripe PaymentIntent with grand total
+	paymentResp, err := s.stripeService.CreatePaymentIntent(ctx, booking)
 	if err != nil {
-		return nil, err
+		// clean up orphan booking
+		_ = s.bookingRepo.Delete(ctx, booking.ID)
+		return nil, fmt.Errorf("creating payment intent: %w", err)
 	}
 
-	// Store PaymentIntent ID
-	if err := s.bookingRepo.StorePaymentIntent(
-		ctx,
-		booking.ID,
-		paymentResp.PaymentIntentID,
-	); err != nil {
-		return nil, err
+	// store PaymentIntent ID
+	if err := s.bookingRepo.StorePaymentIntent(ctx, booking.ID, paymentResp.PaymentIntentID); err != nil {
+		_ = s.bookingRepo.Delete(ctx, booking.ID)
+		return nil, fmt.Errorf("storing payment intent: %w", err)
 	}
 
-	return paymentResp, nil
+	return &domain.CreateBookingResponse{
+		BookingID:            booking.ID,
+		ClientSecret:         paymentResp.ClientSecret,
+		Currency:             "inr",
+		StripePublishableKey: paymentResp.StripePublishableKey,
+		Breakdown:            summary,
+	}, nil
 }
 
 func (s *BookingService) HandlePaymentSuccess(ctx context.Context, paymentIntentID string) error {
@@ -393,24 +473,6 @@ func (s *BookingService) HandlePaymentSuccess(ctx context.Context, paymentIntent
 		seatIDs = append(seatIDs, seat.ShowtimeSeatID)
 	}
 
-	fmt.Print("updating seats status in showtime..........")
-	_, err = s.showtimeSeatRepo.MarkBooked(ctx, booking.ShowtimeID, seatIDs)
-	if err != nil {
-		return err
-	}
-	
-	fmt.Print("updating booking status in bookings..........")
-	err = s.bookingRepo.MarkConfirmed(ctx, paymentIntentID)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("releasing seats in redis.........")
-	err = s.lockRepo.ReleaseSeats(ctx, booking.ShowtimeID, seatIDs)
-	if err != nil {
-		return err
-	}
-
 	s.hub.Broadcast(booking.ShowtimeID, domain.SeatStatusEvent{
 		Type:       "seats_booked",
 		ShowtimeID: booking.ShowtimeID,
@@ -429,6 +491,40 @@ func (s *BookingService) HandlePaymentSuccess(ctx context.Context, paymentIntent
 		return fmt.Errorf("loading user for email: %w", err)
 	}
 
+	// generate QR PNG bytes
+	qrPNG, err := s.qrService.Generate(
+		booking.ID,
+		booking.UserID,
+		booking.ShowtimeID,
+		showtime.EndsAt.Unix(),
+	)
+	if err != nil {
+		return fmt.Errorf("generating qr: %w", err)
+	}
+
+	qrUrl, err := s.storageService.UploadQR(ctx, booking.ID, qrPNG)
+	if err != nil {
+		return fmt.Errorf("uploading qr: %w", err)
+	}
+
+	fmt.Print("updating seats status in showtime..........")
+	_, err = s.showtimeSeatRepo.MarkBooked(ctx, booking.ShowtimeID, seatIDs)
+	if err != nil {
+		return err
+	}
+
+	fmt.Print("updating booking status in bookings..........")
+	err = s.bookingRepo.MarkConfirmed(ctx, paymentIntentID, qrUrl)
+	if err != nil {
+		return err
+	}
+
+	fmt.Println("releasing seats in redis.........")
+	err = s.lockRepo.ReleaseSeats(ctx, booking.ShowtimeID, seatIDs)
+	if err != nil {
+		return err
+	}
+
 	go func() {
 		err := s.mailer.SendBookingConfirmed(context.Background(), domain.BookingConfirmedPayload{
 			User:        user.PublicProfile(),
@@ -438,7 +534,7 @@ func (s *BookingService) HandlePaymentSuccess(ctx context.Context, paymentIntent
 			Theatre:     *showtime.Theatre,
 			Hall:        *showtime.Hall,
 			Seats:       booking.Seats,
-			QRCodeURL:   "https://example.com/qr/" + booking.ID, //later immplement QR code genearation
+			QRCodeURL:   qrUrl,
 			TotalAmount: booking.TotalAmount,
 		})
 		if err != nil {

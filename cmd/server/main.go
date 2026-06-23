@@ -7,7 +7,9 @@ import (
 	handlers "cinemabooking/internal/handler"
 	"cinemabooking/internal/middleware"
 	"cinemabooking/internal/pkg/mailer"
+	"cinemabooking/internal/pkg/storage"
 	"cinemabooking/internal/ws"
+	"os"
 
 	"cinemabooking/internal/payment"
 	repositories "cinemabooking/internal/repository"
@@ -73,11 +75,23 @@ func main() {
 		"CinemaBook",
 	)
 
+	// storage service
+	storageSvc, err := storage.New(
+		cfg.CloudinaryCloudName,
+		cfg.CloudinaryApiKey,
+		cfg.CloudinaryApiSecret,
+	)
+	if err != nil {
+		log.Fatalf("storage init: %v", err)
+	}
+
 	// ws hub
 	hub := ws.NewHub()
 	go hub.Run()
 
 	wsHandler := ws.NewHandler(hub)
+
+	skipTLS := os.Getenv("APP_ENV") == "development"
 
 	bookingService := services.NewBookingService(
 		bookingRepo,
@@ -87,9 +101,10 @@ func main() {
 		lockRepo,
 		stripeClient,
 		cfg.StripePublishableKey,
-		services.NewStripeService(stripeClient, cfg.StripePublishableKey),
+		services.NewStripeService(cfg.StripeSecretKey, cfg.StripePublishableKey, skipTLS),
 		hub,
 		mailerSvc,
+		storageSvc,
 	)
 
 	bookingHandler := handlers.NewBookingHandler(
