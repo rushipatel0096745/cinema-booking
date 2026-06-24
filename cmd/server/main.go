@@ -44,9 +44,9 @@ func main() {
 	if err != nil {
 		log.Fatalf("invalid Redis DB number: %v", err)
 	}
-	redisClient, err := cache.NewRedisClient(cfg.RedisAddr, cfg.RedisPassword, dbNum)
+	redisClient, err := cache.NewRedisClient(cfg.RedisAddr, cfg.RedisPassword, dbNum, cfg.RedisUseTLS)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("connecting to redis: %v", err)
 	}
 	defer redisClient.Close()
 

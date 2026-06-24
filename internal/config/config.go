@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -23,6 +24,7 @@ type Config struct {
 	RedisAddr            string
 	RedisPassword        string
 	RedisDB              string
+	RedisUseTLS          bool
 	StripeSecretKey      string
 	StripePublishableKey string
 	ResendApiKey         string
@@ -61,6 +63,7 @@ func Load() *Config {
 		RedisAddr:            getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:        getEnv("REDIS_PASSWORD", ""),
 		RedisDB:              os.Getenv("REDIS_DB"),
+		RedisUseTLS:          getEnvBool("REDIS_USE_TLS", false),
 		StripePublishableKey: getEnv("STRIPE_PUBLISHABLE_KEY", ""),
 		StripeSecretKey:      getEnv("STRIPE_SECRET_KEY", ""),
 		ResendApiKey:         getEnv("RESEND_API_KEY", ""),
@@ -78,4 +81,18 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func getEnvBool(key string, defaultValue bool) bool {
+	v := os.Getenv(key)
+	if v == "" {
+		return defaultValue
+	}
+
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return defaultValue
+	}
+
+	return b
 }
