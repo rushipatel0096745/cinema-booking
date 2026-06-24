@@ -31,6 +31,7 @@ type Config struct {
 	CloudinaryApiKey     string
 	CloudinaryApiSecret  string
 	CloudinaryCloudName  string
+	QrSecret             string
 }
 
 func Load() *Config {
@@ -68,6 +69,7 @@ func Load() *Config {
 		CloudinaryApiKey:     getEnv("CLOUDINARY_API_KEY", ""),
 		CloudinaryApiSecret:  getEnv("CLOUDINARY_API_SECRET", ""),
 		CloudinaryCloudName:  getEnv("CLOUDINARY_CLOUD_NAME", ""),
+		QrSecret:             getEnv("QR_SECRET", ""),
 	}
 }
 

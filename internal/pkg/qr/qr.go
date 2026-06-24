@@ -7,16 +7,20 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log/slog"
+	"time"
+
+	// "time"
 
 	goqr "github.com/skip2/go-qrcode"
 )
 
-type Service struct {
+type QrService struct {
 	secret string // QR_SECRET env var
 }
 
-func NewService(secret string) *Service {
-	return &Service{secret: secret}
+func NewQrService(secret string) *QrService {
+	return &QrService{secret: secret}
 }
 
 type Payload struct {
@@ -27,9 +31,10 @@ type Payload struct {
 	Signature  string `json:"sig"`
 }
 
-func (s *Service) Generate(bookingID, userID, showtimeID string, expiresAt int64) ([]byte, error) {
+func (s *QrService) Generate(bookingID, userID, showtimeID string, expiresAt int64) ([]byte, error) {
 	sig := s.sign(bookingID, userID, showtimeID, expiresAt)
-
+	slog.Info("qr-debug", "bookingID", bookingID, "userID", userID, "showtimeID", showtimeID, "expiresAt", expiresAt, "signature", sig)
+	// fmt.Println("signature", sig)
 	payload := Payload{
 		BookingID:  bookingID,
 		UserID:     userID,
@@ -52,19 +57,34 @@ func (s *Service) Generate(bookingID, userID, showtimeID string, expiresAt int64
 	return png, nil
 }
 
-func (s *Service) Verify(payload Payload) bool {
+func (s *QrService) Verify(payload Payload) bool {
+	slog.Info("verify qr endpoint hit..........")
+	if time.Now().Unix() > payload.ExpiresAt {
+		return false
+	}
 	expected := s.sign(payload.BookingID, payload.UserID, payload.ShowtimeID, payload.ExpiresAt)
+
+	slog.Info(
+		"verify-debug",
+		"bookingID", payload.BookingID,
+		"userID", payload.UserID,
+		"showtimeID", payload.ShowtimeID,
+		"expiresAt", payload.ExpiresAt,
+		"provided", payload.Signature,
+		"expected", expected,
+	)
+
 	return hmac.Equal([]byte(payload.Signature), []byte(expected))
 }
 
-func (s *Service) sign(bookingID, userID, showtimeID string, expiresAt int64) string {
+func (s *QrService) sign(bookingID, userID, showtimeID string, expiresAt int64) string {
 	h := hmac.New(sha256.New, []byte(s.secret))
 	h.Write([]byte(fmt.Sprintf("%s:%s:%s:%d", bookingID, userID, showtimeID, expiresAt)))
 	return hex.EncodeToString(h.Sum(nil))
 }
 
 // GenerateReader returns an io.Reader for upload
-func (s *Service) GenerateReader(bookingID, userID, showtimeID string, expiresAt int64) (*bytes.Reader, error) {
+func (s *QrService) GenerateReader(bookingID, userID, showtimeID string, expiresAt int64) (*bytes.Reader, error) {
 	png, err := s.Generate(bookingID, userID, showtimeID, expiresAt)
 	if err != nil {
 		return nil, err

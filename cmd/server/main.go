@@ -7,8 +7,10 @@ import (
 	handlers "cinemabooking/internal/handler"
 	"cinemabooking/internal/middleware"
 	"cinemabooking/internal/pkg/mailer"
+	"cinemabooking/internal/pkg/qr"
 	"cinemabooking/internal/pkg/storage"
 	"cinemabooking/internal/ws"
+	"log/slog"
 	"os"
 
 	"cinemabooking/internal/payment"
@@ -24,6 +26,14 @@ import (
 func main() {
 
 	cfg := config.Load()
+
+	logger := slog.New(
+		slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelDebug,
+		}),
+	)
+
+	slog.SetDefault(logger)
 
 	// connect to database
 	pool := db.Connect()
@@ -75,6 +85,9 @@ func main() {
 		"CinemaBook",
 	)
 
+	// qr service
+	qrService := qr.NewQrService(cfg.QrSecret)
+
 	// storage service
 	storageSvc, err := storage.New(
 		cfg.CloudinaryCloudName,
@@ -104,6 +117,7 @@ func main() {
 		services.NewStripeService(cfg.StripeSecretKey, cfg.StripePublishableKey, skipTLS),
 		hub,
 		mailerSvc,
+		qrService,
 		storageSvc,
 	)
 
@@ -138,6 +152,9 @@ func main() {
 
 	// stripe
 	r.POST("/api/webhook/stripe", stripeWebhookHandler.StripeWebhook)
+
+	// verify qr code GET /api/verify/:bookingID?sig=...&uid=...&sid=...&exp=...
+	r.GET("/api/verify/:bookingId", bookingHandler.VerifyTicket)
 
 	// auth routes
 	auth := r.Group("/auth")
@@ -191,7 +208,6 @@ func main() {
 		api.POST("/bookings/lock-seats", bookingHandler.LockSeats)
 		api.POST("/bookings", bookingHandler.CreateBooking)
 		api.POST("/bookings/:id/cancel", bookingHandler.CancelBooking)
-
 	}
 
 	if err := r.Run(); err != nil {

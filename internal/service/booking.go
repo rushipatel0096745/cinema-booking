@@ -30,7 +30,7 @@ type BookingService struct {
 	publishableKey string
 	stripeService  StripeService
 	hub            *ws.Hub
-	qrService      *qr.Service
+	qrService      *qr.QrService
 	storageService *storage.Service
 }
 
@@ -45,7 +45,7 @@ func NewBookingService(
 	stripeService StripeService,
 	hub *ws.Hub,
 	mailer *mailer.Service,
-	qrService *qr.Service,
+	qrService *qr.QrService,
 	storageService *storage.Service,
 ) *BookingService {
 	return &BookingService{
@@ -67,6 +67,10 @@ func NewBookingService(
 func (s *BookingService) GetUserBookings(ctx context.Context, filter domain.BookingListFilter) ([]domain.Booking, int, error) {
 	filter.Page, filter.Limit = domain.NormalisePage(filter.Page, filter.Limit)
 	return s.bookingRepo.FindByUserID(ctx, filter)
+}
+
+func (s *BookingService) GetBookingById(ctx context.Context, bookingId string) (*domain.Booking, error) {
+	return s.bookingRepo.GetByID(ctx, bookingId)
 }
 
 func (s *BookingService) GetBooking(ctx context.Context, bookingID string, userID string) (*domain.Booking, error) {
@@ -443,36 +447,145 @@ func (s *BookingService) CreateBooking(ctx context.Context, userID string, showt
 	}, nil
 }
 
-func (s *BookingService) HandlePaymentSuccess(ctx context.Context, paymentIntentID string) error {
+// func (s *BookingService) HandlePaymentSuccess(ctx context.Context, paymentIntentID string) error {
 
+// 	booking, err := s.bookingRepo.GetByPaymentIntentID(ctx, paymentIntentID)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	if booking == nil {
+// 		return fmt.Errorf(
+// 			"booking not found for payment intent %s",
+// 			paymentIntentID,
+// 		)
+// 	}
+
+// 	// webhook retry protection
+// 	if booking.Status == "confirmed" {
+// 		return nil
+// 	}
+
+// 	seats, err := s.bookingRepo.GetBookedSeats(ctx, booking.ID)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	seatIDs := make([]string, 0, len(seats))
+
+// 	for _, seat := range seats {
+// 		seatIDs = append(seatIDs, seat.ShowtimeSeatID)
+// 	}
+
+// 	s.hub.Broadcast(booking.ShowtimeID, domain.SeatStatusEvent{
+// 		Type:       "seats_booked",
+// 		ShowtimeID: booking.ShowtimeID,
+// 		SeatIDs:    seatIDs,
+// 		Status:     domain.SeatStatusBooked,
+// 	})
+
+// 	showtime, err := s.showtimeRepo.FindByIDWithDetails(ctx, booking.ShowtimeID)
+// 	if err != nil {
+// 		return fmt.Errorf("loading showtime details: %w", err)
+// 	}
+
+// 	// load user for email
+// 	user, err := s.userRepo.FindByID(ctx, booking.UserID)
+// 	if err != nil {
+// 		return fmt.Errorf("loading user for email: %w", err)
+// 	}
+
+// 	// generate QR PNG bytes
+// 	fmt.Println("generating qr for booking..........")
+// 	qrPNG, err := s.qrService.Generate(
+// 		booking.ID,
+// 		booking.UserID,
+// 		booking.ShowtimeID,
+// 		showtime.EndsAt.Unix(),
+// 	)
+// 	if err != nil {
+// 		return fmt.Errorf("generating qr: %w", err)
+// 	}
+
+// 	fmt.Println("uploading qr for booking..........")
+// 	qrUrl, err := s.storageService.UploadQR(ctx, booking.ID, qrPNG)
+// 	if err != nil {
+// 		return fmt.Errorf("uploading qr: %w", err)
+// 	}
+
+// 	fmt.Print("updating seats status in showtime..........")
+// 	_, err = s.showtimeSeatRepo.MarkBooked(ctx, booking.ShowtimeID, seatIDs)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	fmt.Print("updating booking status in bookings..........")
+// 	err = s.bookingRepo.MarkConfirmed(ctx, paymentIntentID, qrUrl)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	fmt.Println("releasing seats in redis.........")
+// 	err = s.lockRepo.ReleaseSeats(ctx, booking.ShowtimeID, seatIDs)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	go func() {
+// 		err := s.mailer.SendBookingConfirmed(context.Background(), domain.BookingConfirmedPayload{
+// 			User:        user.PublicProfile(),
+// 			Booking:     *booking,
+// 			Showtime:    *showtime,
+// 			Movie:       *showtime.Movie,
+// 			Theatre:     *showtime.Theatre,
+// 			Hall:        *showtime.Hall,
+// 			Seats:       booking.Seats,
+// 			QRCodeURL:   qrUrl,
+// 			TotalAmount: booking.TotalAmount,
+// 		})
+// 		if err != nil {
+// 			slog.Error("sending booking confirmed email",
+// 				"booking_id", booking.ID,
+// 				"error", err,
+// 			)
+// 		}
+// 	}()
+
+// 	return nil
+// }
+
+func (s *BookingService) HandlePaymentSuccess(ctx context.Context, paymentIntentID string) error {
 	booking, err := s.bookingRepo.GetByPaymentIntentID(ctx, paymentIntentID)
 	if err != nil {
 		return err
 	}
-
-	if booking == nil {
-		return fmt.Errorf(
-			"booking not found for payment intent %s",
-			paymentIntentID,
-		)
+	if booking.Status == domain.BookingStatusConfirmed {
+		return nil // idempotency — already processed
 	}
 
-	// webhook retry protection
-	if booking.Status == "confirmed" {
-		return nil
+	// 1. confirm booking + mark seats in DB first — fast operations
+	if err := s.bookingRepo.MarkConfirmed(ctx, paymentIntentID, ""); err != nil {
+		return fmt.Errorf("confirming booking: %w", err)
 	}
 
 	seats, err := s.bookingRepo.GetBookedSeats(ctx, booking.ID)
 	if err != nil {
 		return err
 	}
-
 	seatIDs := make([]string, 0, len(seats))
-
 	for _, seat := range seats {
 		seatIDs = append(seatIDs, seat.ShowtimeSeatID)
 	}
 
+	if _, err := s.showtimeSeatRepo.MarkBooked(ctx, booking.ShowtimeID, seatIDs); err != nil {
+		return err
+	}
+
+	if err := s.lockRepo.ReleaseSeats(ctx, booking.ShowtimeID, seatIDs); err != nil {
+		return err
+	}
+
+	// broadcast immediately
 	s.hub.Broadcast(booking.ShowtimeID, domain.SeatStatusEvent{
 		Type:       "seats_booked",
 		ShowtimeID: booking.ShowtimeID,
@@ -480,53 +593,44 @@ func (s *BookingService) HandlePaymentSuccess(ctx context.Context, paymentIntent
 		Status:     domain.SeatStatusBooked,
 	})
 
-	showtime, err := s.showtimeRepo.FindByIDWithDetails(ctx, booking.ShowtimeID)
-	if err != nil {
-		return fmt.Errorf("loading showtime details: %w", err)
-	}
-
-	// load user for email
-	user, err := s.userRepo.FindByID(ctx, booking.UserID)
-	if err != nil {
-		return fmt.Errorf("loading user for email: %w", err)
-	}
-
-	// generate QR PNG bytes
-	qrPNG, err := s.qrService.Generate(
-		booking.ID,
-		booking.UserID,
-		booking.ShowtimeID,
-		showtime.EndsAt.Unix(),
-	)
-	if err != nil {
-		return fmt.Errorf("generating qr: %w", err)
-	}
-
-	qrUrl, err := s.storageService.UploadQR(ctx, booking.ID, qrPNG)
-	if err != nil {
-		return fmt.Errorf("uploading qr: %w", err)
-	}
-
-	fmt.Print("updating seats status in showtime..........")
-	_, err = s.showtimeSeatRepo.MarkBooked(ctx, booking.ShowtimeID, seatIDs)
-	if err != nil {
-		return err
-	}
-
-	fmt.Print("updating booking status in bookings..........")
-	err = s.bookingRepo.MarkConfirmed(ctx, paymentIntentID, qrUrl)
-	if err != nil {
-		return err
-	}
-
-	fmt.Println("releasing seats in redis.........")
-	err = s.lockRepo.ReleaseSeats(ctx, booking.ShowtimeID, seatIDs)
-	if err != nil {
-		return err
-	}
-
+	// 2. QR gen + upload + email in background — these are slow
 	go func() {
-		err := s.mailer.SendBookingConfirmed(context.Background(), domain.BookingConfirmedPayload{
+		bgCtx := context.Background()
+
+		showtime, err := s.showtimeRepo.FindByIDWithDetails(bgCtx, booking.ShowtimeID)
+		if err != nil {
+			slog.Error("loading showtime for qr", "error", err)
+			return
+		}
+
+		qrPNG, err := s.qrService.Generate(
+			booking.ID, booking.UserID,
+			booking.ShowtimeID, showtime.EndsAt.Unix(),
+		)
+		if err != nil {
+			slog.Error("generating qr", "booking_id", booking.ID, "error", err)
+			return
+		}
+
+		qrURL, err := s.storageService.UploadQR(bgCtx, booking.ID, qrPNG)
+		if err != nil {
+			slog.Error("uploading qr", "booking_id", booking.ID, "error", err)
+			return
+		}
+
+		// update qr_code_url now that we have it
+		if err := s.bookingRepo.UpdateQRURL(bgCtx, booking.ID, qrURL); err != nil {
+			slog.Error("updating qr url", "booking_id", booking.ID, "error", err)
+			return
+		}
+
+		user, err := s.userRepo.FindByID(bgCtx, booking.UserID)
+		if err != nil {
+			slog.Error("loading user for email", "error", err)
+			return
+		}
+
+		if err := s.mailer.SendBookingConfirmed(bgCtx, domain.BookingConfirmedPayload{
 			User:        user.PublicProfile(),
 			Booking:     *booking,
 			Showtime:    *showtime,
@@ -534,14 +638,10 @@ func (s *BookingService) HandlePaymentSuccess(ctx context.Context, paymentIntent
 			Theatre:     *showtime.Theatre,
 			Hall:        *showtime.Hall,
 			Seats:       booking.Seats,
-			QRCodeURL:   qrUrl,
+			QRCodeURL:   qrURL,
 			TotalAmount: booking.TotalAmount,
-		})
-		if err != nil {
-			slog.Error("sending booking confirmed email",
-				"booking_id", booking.ID,
-				"error", err,
-			)
+		}); err != nil {
+			slog.Error("sending confirmation email", "booking_id", booking.ID, "error", err)
 		}
 	}()
 
@@ -562,4 +662,8 @@ func (s *BookingService) HandlePaymentFailed(ctx context.Context, paymentIntentI
 	}
 
 	return s.bookingRepo.UpdateStatus(ctx, booking.ID, domain.BookingStatusCancelled)
+}
+
+func (s *BookingService) VerifyQR(payload qr.Payload) bool {
+	return s.qrService.Verify(payload)
 }

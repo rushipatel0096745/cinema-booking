@@ -28,6 +28,7 @@ type BookingRepository interface {
 
 	GetBookedSeats(ctx context.Context, bookingId string) ([]domain.BookedSeat, error)
 	UpdateStatus(ctx context.Context, bookingID string, status string) error
+	UpdateQRURL(ctx context.Context, bookingID string, qrURL string) error
 	ReleaseSeats(ctx context.Context, bookingID string) error
 	Delete(ctx context.Context, bookingID string) error
 }
@@ -376,72 +377,65 @@ func (r *bookingRepository) attachSeats(ctx context.Context, bookings []domain.B
 }
 
 // func (r *bookingRepository) FindByUserID(ctx context.Context, filter domain.BookingListFilter) ([]domain.Booking, int, error) {
-// 	offset := (filter.Page - 1) * filter.Limit
-
-// 	rows, err := r.db.Query(ctx, `
-// 		SELECT
-// 			b.id, b.user_id, b.showtime_id, b.status, b.total_amount,
-// 			b.stripe_payment_intent_id, b.qr_code_url, b.created_at, b.confirmed_at,
-// 			m.title AS movie_title,
-// 			m.poster_url AS movie_poster,
-// 			t.name  AS theatre_name,
-// 			t.city  AS theatre_city,
-// 			s.starts_at,
-// 			COUNT(*) OVER() AS total_count
-// 		FROM bookings b
-// 		JOIN showtimes st ON st.id = b.showtime_id
-// 		JOIN movies    m  ON m.id  = st.movie_id
-// 		JOIN halls     h  ON h.id  = st.hall_id
-// 		JOIN theatres  t  ON t.id  = h.theatre_id
-// 		JOIN showtimes s  ON s.id  = b.showtime_id
-// 		WHERE b.user_id = $1
-// 		  AND ($2 = '' OR b.status = $2)
-// 		ORDER BY b.created_at DESC
-// 		LIMIT $3 OFFSET $4`,
-// 		filter.UserID, filter.Status, filter.Limit, offset,
-// 	)
-// 	if err != nil {
-// 		return nil, 0, err
-// 	}
-// 	defer rows.Close()
-
-// 	var bookings []domain.Booking
-// 	var total int
-
-// 	for rows.Next() {
-// 		var b domain.Booking
-// 		var showtime domain.Showtime
-// 		var movie domain.Movie
-// 		var theatre domain.Theatre
-// 		var confirmedAt pgtype.Timestamptz
-// 		var qrURL, stripePI pgtype.Text
-
-// 		err := rows.Scan(
-// 			&b.ID, &b.UserID, &b.ShowtimeID, &b.Status, &b.TotalAmount,
-// 			&stripePI, &qrURL, &b.CreatedAt, &confirmedAt,
-// 			&movie.Title, &movie.PosterURL,
-// 			&theatre.Name, &theatre.City,
-// 			&showtime.StartsAt,
-// 			&total,
-// 		)
-// 		if err != nil {
-// 			return nil, 0, err
-// 		}
-
-// 		b.StripePaymentIntent = stripePI.String
-// 		b.QRCodeURL = qrURL.String
-// 		if confirmedAt.Valid {
-// 			t := confirmedAt.Time
-// 			b.ConfirmedAt = &t
-// 		}
-
-// 		showtime.Movie = &movie
-// 		showtime.Theatre = &theatre
-// 		b.Showtime = &showtime
-// 		bookings = append(bookings, b)
-// 	}
-
-// 	return bookings, total, rows.Err()
+	// 	offset := (filter.Page - 1) * filter.Limit
+	// 	rows, err := r.db.Query(ctx, `
+	// 		SELECT
+	// 			b.id, b.user_id, b.showtime_id, b.status, b.total_amount,
+	// 			b.stripe_payment_intent_id, b.qr_code_url, b.created_at, b.confirmed_at,
+	// 			m.title AS movie_title,
+	// 			m.poster_url AS movie_poster,
+	// 			t.name  AS theatre_name,
+	// 			t.city  AS theatre_city,
+	// 			s.starts_at,
+	// 			COUNT(*) OVER() AS total_count
+	// 		FROM bookings b
+	// 		JOIN showtimes st ON st.id = b.showtime_id
+	// 		JOIN movies    m  ON m.id  = st.movie_id
+	// 		JOIN halls     h  ON h.id  = st.hall_id
+	// 		JOIN theatres  t  ON t.id  = h.theatre_id
+	// 		JOIN showtimes s  ON s.id  = b.showtime_id
+	// 		WHERE b.user_id = $1
+	// 		  AND ($2 = '' OR b.status = $2)
+	// 		ORDER BY b.created_at DESC
+	// 		LIMIT $3 OFFSET $4`,
+	// 		filter.UserID, filter.Status, filter.Limit, offset,
+	// 	)
+	// 	if err != nil {
+	// 		return nil, 0, err
+	// 	}
+	// 	defer rows.Close()
+	// 	var bookings []domain.Booking
+	// 	var total int
+	// 	for rows.Next() {
+	// 		var b domain.Booking
+	// 		var showtime domain.Showtime
+	// 		var movie domain.Movie
+	// 		var theatre domain.Theatre
+	// 		var confirmedAt pgtype.Timestamptz
+	// 		var qrURL, stripePI pgtype.Text
+	// 		err := rows.Scan(
+	// 			&b.ID, &b.UserID, &b.ShowtimeID, &b.Status, &b.TotalAmount,
+	// 			&stripePI, &qrURL, &b.CreatedAt, &confirmedAt,
+	// 			&movie.Title, &movie.PosterURL,
+	// 			&theatre.Name, &theatre.City,
+	// 			&showtime.StartsAt,
+	// 			&total,
+	// 		)
+	// 		if err != nil {
+	// 			return nil, 0, err
+	// 		}
+	// 		b.StripePaymentIntent = stripePI.String
+	// 		b.QRCodeURL = qrURL.String
+	// 		if confirmedAt.Valid {
+	// 			t := confirmedAt.Time
+	// 			b.ConfirmedAt = &t
+	// 		}
+	// 		showtime.Movie = &movie
+	// 		showtime.Theatre = &theatre
+	// 		b.Showtime = &showtime
+	// 		bookings = append(bookings, b)
+	// 	}
+	// 	return bookings, total, rows.Err()
 // }
 
 func (r *bookingRepository) StorePaymentIntent(ctx context.Context, bookingID, paymentIntentID string) error {
@@ -522,13 +516,28 @@ func (r *bookingRepository) GetByPaymentIntentID(ctx context.Context, paymentInt
 	return &booking, nil
 }
 
-func (r *bookingRepository) MarkConfirmed(ctx context.Context, paymentIntentID string, qrCode string) error {
-	now := time.Now().UTC()
+// func (r *bookingRepository) MarkConfirmed(ctx context.Context, paymentIntentID string, qrCode string) error {
+// 	now := time.Now().UTC()
+// 	result, err := r.db.Exec(ctx, `
+// 		UPDATE bookings
+// 		SET status = $1, confirmed_at = $2, qr_code_url = $3
+// 		WHERE stripe_payment_intent_id = $4 AND status != $1
+// 	`, domain.BookingStatusConfirmed, now, qrCode, paymentIntentID)
+
+// 	slog.Info("mark confirmed", "rows_affected", result.RowsAffected(), "payment_intent", paymentIntentID)
+
+// 	return err
+// }
+
+func (r *bookingRepository) MarkConfirmed(ctx context.Context, paymentIntentID string, qrURL string) error {
 	_, err := r.db.Exec(ctx, `
-		UPDATE bookings
-		SET status = $1, confirmed_at = $2, qr_code_url = $3
-		WHERE stripe_payment_intent_id = $4 AND status != $1
-	`, domain.BookingStatusConfirmed, now, qrCode, paymentIntentID)
+        UPDATE bookings
+        SET status       = 'confirmed',
+            confirmed_at = NOW()
+        WHERE stripe_payment_intent_id = $1
+          AND status = 'pending'`,
+		paymentIntentID,
+	)
 	return err
 }
 
@@ -604,6 +613,14 @@ func (r *bookingRepository) UpdateStatus(ctx context.Context, bookingID string, 
 	_, err := r.db.Exec(ctx,
 		`UPDATE bookings SET status = $1 WHERE id = $2`,
 		status, bookingID,
+	)
+	return err
+}
+
+func (r *bookingRepository) UpdateQRURL(ctx context.Context, bookingID string, qrURL string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE bookings SET qr_code_url = $1 WHERE id = $2`,
+		qrURL, bookingID,
 	)
 	return err
 }

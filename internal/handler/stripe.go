@@ -3,6 +3,7 @@ package handlers
 import (
 	"cinemabooking/internal/domain"
 	services "cinemabooking/internal/service"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -29,7 +30,7 @@ func NewWebhookHandler(
 }
 
 func (h *WebhookHandler) StripeWebhook(c *gin.Context) {
-	ctx := c.Request.Context()
+	// ctx := c.Request.Context()
 
 	// read raw body first (needed for signature verification)
 	payload, err := io.ReadAll(http.MaxBytesReader(c.Writer, c.Request.Body, 65536))
@@ -57,9 +58,11 @@ func (h *WebhookHandler) StripeWebhook(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, domain.Fail[any]("failed to parse payment intent"))
 			return
 		}
-		if err := h.bookingService.HandlePaymentSuccess(ctx, pi.ID); err != nil {
-			slog.Error("handling payment success", "payment_intent", pi.ID, "error", err)
-		}
+		go func() {
+			if err := h.bookingService.HandlePaymentSuccess(context.Background(), pi.ID); err != nil {
+				slog.Error("handling payment success", "payment_intent", pi.ID, "error", err)
+			}
+		}()
 
 	case "payment_intent.payment_failed":
 		var pi stripe.PaymentIntent
@@ -67,9 +70,11 @@ func (h *WebhookHandler) StripeWebhook(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, domain.Fail[any]("failed to parse payment intent"))
 			return
 		}
-		if err := h.bookingService.HandlePaymentFailed(ctx, pi.ID); err != nil {
-			slog.Error("handling payment failed", "payment_intent", pi.ID, "error", err)
-		}
+		go func() {
+			if err := h.bookingService.HandlePaymentFailed(context.Background(), pi.ID); err != nil {
+				slog.Error("handling payment failed", "payment_intent", pi.ID, "error", err)
+			}
+		}()
 	}
 
 	c.JSON(http.StatusOK, domain.OK[any](nil))

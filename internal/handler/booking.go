@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"cinemabooking/internal/domain"
+	"cinemabooking/internal/pkg/qr"
 	services "cinemabooking/internal/service"
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,6 +19,20 @@ func NewBookingHandler(bookingService *services.BookingService) *BookingHandler 
 	return &BookingHandler{
 		bookingService: bookingService,
 	}
+}
+
+func queryInt64(c *gin.Context, key string) int64 {
+	v := c.Query(key)
+	if v == "" {
+		return 0
+	}
+
+	n, err := strconv.ParseInt(v, 10, 64)
+	if err != nil {
+		return 0
+	}
+
+	return n
 }
 
 func (h *BookingHandler) LockSeats(c *gin.Context) {
@@ -146,4 +162,39 @@ func (h *BookingHandler) CancelBooking(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, domain.OK[any](nil))
+}
+
+// GET /api/v1/verify/:bookingId?sig=...&uid=...&sid=...&exp=...
+func (h *BookingHandler) VerifyTicket(c *gin.Context) {
+	payload := qr.Payload{
+		BookingID:  c.Param("bookingId"),
+		UserID:     c.Query("uid"),
+		ShowtimeID: c.Query("sid"),
+		ExpiresAt:  queryInt64(c, "exp"),
+		Signature:  c.Query("sig"),
+	}
+
+	if !h.bookingService.VerifyQR(payload) {
+		c.JSON(http.StatusUnauthorized, domain.Fail[any]("invalid ticket"))
+		return
+	}
+
+	// optionally check booking status in DB for extra certainty
+	booking, err := h.bookingService.GetBookingById(c.Request.Context(), payload.BookingID)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+
+	if booking.Status != domain.BookingStatusConfirmed {
+		c.JSON(http.StatusConflict, domain.Fail[any]("ticket already used or cancelled"))
+		return
+	}
+
+	c.JSON(http.StatusOK, domain.OK(gin.H{
+		"valid":       true,
+		"booking_id":  booking.ID,
+		"showtime_id": booking.ShowtimeID,
+		"seats":       booking.Seats,
+	}))
 }
