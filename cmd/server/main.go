@@ -216,9 +216,15 @@ func main() {
 		api.POST("/bookings/:id/cancel", bookingHandler.CancelBooking)
 	}
 
-	if err := r.Run(); err != nil {
-		log.Fatalf("failed to run server: %v", err)
+	log.Printf("Server running on port %s\n", cfg.Port)
+
+	if err := r.Run(cfg.Port); err != nil {
+		log.Fatalf("failed to run server: %v\n", err)
 	}
+
+	// if err := r.Run(); err != nil {
+	// 	log.Fatalf("failed to run server: %v", err)
+	// }
 }
 
 func healthHandler(db *pgxpool.Pool, redis *redis.Client) gin.HandlerFunc {
