@@ -11,6 +11,7 @@ import (
 	"cinemabooking/internal/pkg/storage"
 	"cinemabooking/internal/ws"
 	"log/slog"
+	"net/http"
 	"os"
 
 	"cinemabooking/internal/payment"
@@ -21,6 +22,8 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -130,6 +133,9 @@ func main() {
 
 	r := gin.Default()
 
+	// health check — no auth, no group, always first
+	r.GET("/health", healthHandler(pool, redisClient))
+
 	// CORS
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
@@ -212,5 +218,31 @@ func main() {
 
 	if err := r.Run(); err != nil {
 		log.Fatalf("failed to run server: %v", err)
+	}
+}
+
+func healthHandler(db *pgxpool.Pool, redis *redis.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if err := db.Ping(c.Request.Context()); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "unhealthy",
+				"db":     "unreachable",
+			})
+			return
+		}
+
+		if err := redis.Ping(c.Request.Context()).Err(); err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status": "unhealthy",
+				"redis":  "unreachable",
+			})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"status": "ok",
+			"db":     "connected",
+			"redis":  "connected",
+		})
 	}
 }

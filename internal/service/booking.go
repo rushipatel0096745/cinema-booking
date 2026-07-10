@@ -84,6 +84,36 @@ func (s *BookingService) GetBooking(ctx context.Context, bookingID string, userI
 		return nil, domain.ErrForbidden
 	}
 
+	// Sync with Stripe if the booking is pending and has a PaymentIntent ID
+	if booking.Status == domain.BookingStatusPending && booking.StripePaymentIntent != "" {
+		slog.Info("syncing booking status with stripe", "booking_id", booking.ID, "payment_intent_id", booking.StripePaymentIntent)
+		intent, err := s.stripeService.GetPaymentIntent(ctx, booking.StripePaymentIntent)
+		if err != nil {
+			slog.Error("failed to retrieve payment intent from stripe", "booking_id", booking.ID, "error", err)
+		} else if intent != nil {
+			slog.Info("retrieved stripe payment intent status", "booking_id", booking.ID, "status", intent.Status)
+			if intent.Status == "succeeded" {
+				if err := s.HandlePaymentSuccess(ctx, booking.StripePaymentIntent); err != nil {
+					slog.Error("failed to handle payment success from stripe sync", "booking_id", booking.ID, "error", err)
+				} else {
+					slog.Info("successfully confirmed booking from stripe sync", "booking_id", booking.ID)
+					if reloaded, err := s.bookingRepo.GetByID(ctx, bookingID); err == nil {
+						booking = reloaded
+					}
+				}
+			} else if intent.Status == "canceled" {
+				if err := s.HandlePaymentFailed(ctx, booking.StripePaymentIntent); err != nil {
+					slog.Error("failed to handle payment failure from stripe sync", "booking_id", booking.ID, "error", err)
+				} else {
+					slog.Info("successfully cancelled booking from stripe sync", "booking_id", booking.ID)
+					if reloaded, err := s.bookingRepo.GetByID(ctx, bookingID); err == nil {
+						booking = reloaded
+					}
+				}
+			}
+		}
+	}
+
 	showtime, err := s.showtimeRepo.FindByIDWithDetails(ctx, booking.ShowtimeID)
 	if err != nil {
 		return nil, domain.NewAppError(http.StatusNotFound, "showtime not found")

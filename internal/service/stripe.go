@@ -77,6 +77,10 @@ type StripeService interface {
 		ctx context.Context,
 		booking *domain.Booking,
 	) (*domain.CreateBookingResponse, error)
+	GetPaymentIntent(
+		ctx context.Context,
+		paymentIntentID string,
+	) (*stripe.PaymentIntent, error)
 }
 
 type stripeService struct {
@@ -134,4 +138,12 @@ func (s *stripeService) CreatePaymentIntent(ctx context.Context, booking *domain
 		Currency:             "inr",
 		StripePublishableKey: s.publishableKey,
 	}, nil
+}
+
+func (s *stripeService) GetPaymentIntent(ctx context.Context, paymentIntentID string) (*stripe.PaymentIntent, error) {
+	intent, err := s.client.PaymentIntents.Get(paymentIntentID, nil)
+	if err != nil {
+		return nil, err
+	}
+	return intent, nil
 }
