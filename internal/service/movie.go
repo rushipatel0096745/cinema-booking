@@ -62,6 +62,7 @@ func (s *MovieService) CreateMovie(ctx context.Context, req *domain.CreateMovieR
 		Genre:       req.Genre,
 		Language:    req.Language,
 		PosterURL:   req.PosterURL,
+		BackdropURL: req.BackdropURL,
 		TrailerURL:  req.TrailerURL,
 		ReleaseDate: releaseDate,
 		TmdbID:      req.TmdbID,

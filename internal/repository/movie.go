@@ -23,12 +23,12 @@ func NewMovieRepository(db *pgxpool.Pool) *MovieRepository {
 }
 
 const movieColumns = `id, title, description, duration_mins, genre, language,
-	poster_url, trailer_url, release_date, rating, tmdb_id, created_at`
+	poster_url, backdrop_path, trailer_url, release_date, rating, tmdb_id, created_at`
 
 func scanMovie(row pgx.Row, m *domain.Movie) error {
 	return row.Scan(
 		&m.ID, &m.Title, &m.Description, &m.DurationMin, &m.Genre, &m.Language,
-		&m.PosterURL, &m.TrailerURL, &m.ReleaseDate, &m.Rating, &m.TmdbID, &m.CreatedAt,
+		&m.PosterURL, &m.BackdropURL, &m.TrailerURL, &m.ReleaseDate, &m.Rating, &m.TmdbID, &m.CreatedAt,
 	)
 }
 
@@ -141,7 +141,7 @@ func (r *MovieRepository) FindWithFilters(ctx context.Context, f domain.MovieFil
 		var m domain.Movie
 		if err := rows.Scan(
 			&m.ID, &m.Title, &m.Description, &m.DurationMin, &m.Genre, &m.Language,
-			&m.PosterURL, &m.TrailerURL, &m.ReleaseDate, &m.Rating, &m.TmdbID, &m.CreatedAt,
+			&m.PosterURL, &m.BackdropURL, &m.TrailerURL, &m.ReleaseDate, &m.Rating, &m.TmdbID, &m.CreatedAt,
 			&total,
 		); err != nil {
 			return nil, 0, err
@@ -156,11 +156,11 @@ func (r *MovieRepository) FindWithFilters(ctx context.Context, f domain.MovieFil
 
 func (r *MovieRepository) Create(ctx context.Context, movie *domain.Movie) error {
 	return r.db.QueryRow(ctx,
-		`INSERT INTO movies (title, description, duration_mins, genre, language, poster_url, trailer_url, release_date, tmdb_id)
+		`INSERT INTO movies (title, description, duration_mins, genre, language, poster_url, backdrop_url, trailer_url, release_date, tmdb_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
          RETURNING id, rating, created_at`,
 		movie.Title, movie.Description, movie.DurationMin, movie.Genre, movie.Language,
-		movie.PosterURL, movie.TrailerURL, movie.ReleaseDate, movie.TmdbID,
+		movie.PosterURL, movie.BackdropURL, movie.TrailerURL, movie.ReleaseDate, movie.TmdbID,
 	).Scan(&movie.ID, &movie.Rating, &movie.CreatedAt)
 }
 

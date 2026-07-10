@@ -11,6 +11,7 @@ type Movie struct {
 	Genre       []string  `json:"genre"`
 	Language    string    `json:"language"`
 	PosterURL   string    `json:"poster_url,omitempty"`
+	BackdropURL string    `json:"backdrop_path,omitempty"`
 	TrailerURL  string    `json:"trailer_url,omitempty"`
 	ReleaseDate time.Time `json:"release_date"`
 	Rating      float64   `json:"rating"`
@@ -42,6 +43,7 @@ type CreateMovieRequest struct {
 	Genre       []string `json:"genre"        binding:"required,min=1"`
 	Language    string   `json:"language"     binding:"required"`
 	PosterURL   string   `json:"poster_url"   binding:"omitempty,url"`
+	BackdropURL string   `json:"backdrop_url" binding:"omitempty,url"`
 	TrailerURL  string   `json:"trailer_url"  binding:"omitempty,url"`
 	ReleaseDate string   `json:"release_date" binding:"required"` // "2006-01-02"
 	TmdbID      string   `json:"tmdb_id"      binding:"omitempty"`
