@@ -141,6 +141,7 @@ func main() {
 		AllowOrigins: []string{
 			"http://localhost:5173", // Vite
 			"http://localhost:3000", // React
+			"https://cinema-booking-rushikesh.vercel.app", // vercel deployment
 		},
 		AllowMethods: []string{
 			"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS",
