@@ -62,7 +62,8 @@ func (s *Service) SendBookingConfirmed(ctx context.Context, p domain.BookingConf
 
 	return s.send(
 		ctx,
-		p.User.Email,
+		// p.User.Email,
+		"rp0096745@gmail.com", // temporary
 		fmt.Sprintf("Your tickets for %s are confirmed!", p.Movie.Title),
 		html,
 	)
