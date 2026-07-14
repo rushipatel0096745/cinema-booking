@@ -15,8 +15,8 @@ type User struct {
 	Name         string    `json:"name"`
 	Phone        string    `json:"phone,omitempty"`
 	PasswordHash string    `json:"-"` // never serialised
-	GoogleID     string   `json:"-"`
-	AvatarURL    string   `json:"avatar_url,omitempty"`
+	GoogleID     string    `json:"-"`
+	AvatarURL    string    `json:"avatar_url,omitempty"`
 	Role         string    `json:"role"`
 	CreatedAt    time.Time `json:"created_at"`
 }
@@ -34,18 +34,22 @@ func (u *User) PublicProfile() UserProfile {
 		ID:        u.ID,
 		Name:      u.Name,
 		Email:     u.Email,
+		Phone:     u.Phone,
 		AvatarURL: avatarURL,
 		Role:      u.Role,
+		CreatedAt: u.CreatedAt,
 	}
 }
 
 // UserProfile is the public-facing subset of User.
 type UserProfile struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Email     string `json:"email"`
-	AvatarURL string `json:"avatar_url,omitempty"`
-	Role      string `json:"role"`
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Email     string    `json:"email"`
+	Phone     string    `json:"phone,omitempty"`
+	AvatarURL string    `json:"avatar_url,omitempty"`
+	Role      string    `json:"role"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // RefreshToken stores a hashed refresh token tied to a user.
@@ -89,4 +93,18 @@ type AuthResponse struct {
 
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password" binding:"required"`
+	NewPassword     string `json:"new_password"     binding:"required,min=8"`
+	ConfirmPassword string `json:"confirm_password" binding:"required"`
+}
+
+type UpdateEmailRequest struct {
+	Email string `json:"email" binding:"required,email"`
+}
+
+type VerifyEmailChangeRequest struct {
+	Code string `json:"code" binding:"required,len=6"`
 }

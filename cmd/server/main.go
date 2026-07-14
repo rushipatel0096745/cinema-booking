@@ -56,9 +56,30 @@ func main() {
 	// stripe client
 	stripeClient := payment.NewStripeClient(cfg.StripeSecretKey)
 
+	// mailer service
+	mailerSvc := mailer.New(
+		cfg.ResendApiKey,
+		cfg.FromEmail,
+		"CinemaBook",
+	)
+
+	// qr service
+	qrService := qr.NewQrService(cfg.QrSecret)
+
+	// storage service
+	storageSvc, err := storage.New(
+		cfg.CloudinaryCloudName,
+		cfg.CloudinaryApiKey,
+		cfg.CloudinaryApiSecret,
+	)
+	if err != nil {
+		log.Fatalf("storage init: %v", err)
+	}
+
 	// user auth service
 	userRepo := repositories.NewUserRepository(pool)
-	authService := services.NewAuthService(userRepo, cfg)
+	emailVerificationRepo := repositories.NewEmailVerificationRepository(redisClient)
+	authService := services.NewAuthService(userRepo, cfg, emailVerificationRepo, mailerSvc)
 	authHandler := handlers.NewAuthHandler(authService, cfg, userRepo)
 
 	// movie service
@@ -80,26 +101,6 @@ func main() {
 	bookingRepo := repositories.NewBookingRepository(pool)
 	showtimeSeatRepo := repositories.NewShowtimeSeatRepository(pool)
 	lockRepo := repositories.NewSeatLockRepository(redisClient)
-
-	// mailer service
-	mailerSvc := mailer.New(
-		cfg.ResendApiKey,
-		cfg.FromEmail,
-		"CinemaBook",
-	)
-
-	// qr service
-	qrService := qr.NewQrService(cfg.QrSecret)
-
-	// storage service
-	storageSvc, err := storage.New(
-		cfg.CloudinaryCloudName,
-		cfg.CloudinaryApiKey,
-		cfg.CloudinaryApiSecret,
-	)
-	if err != nil {
-		log.Fatalf("storage init: %v", err)
-	}
 
 	// ws hub
 	hub := ws.NewHub()
@@ -139,8 +140,8 @@ func main() {
 	// CORS
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
-			"http://localhost:5173", // Vite
-			"http://localhost:3000", // React
+			"http://localhost:5173",                       // Vite
+			"http://localhost:3000",                       // React
 			"https://cinema-booking-rushikesh.vercel.app", // vercel deployment
 		},
 		AllowMethods: []string{
@@ -172,6 +173,14 @@ func main() {
 		auth.POST("/logout", authHandler.Logout)
 		auth.GET("/google/login", authHandler.GoogleLogin)
 		auth.GET("/google/callback", authHandler.GoogleCallback)
+	}
+
+	users := r.Group("/users", middleware.AuthMiddleware(authService))
+	{
+		users.PUT("/profile", authHandler.UpdateProfile)
+		users.PUT("/change-password", authHandler.ChangePassword)
+		users.PATCH("/update-email", authHandler.UpdateEmail)
+		users.POST("/verify-email", authHandler.VerifyEmailChange)
 	}
 
 	r.GET("/ws/showtimes/:id", wsHandler.ServeWS)

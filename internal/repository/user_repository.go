@@ -9,6 +9,7 @@ import (
 
 	"cinemabooking/internal/domain"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -22,6 +23,36 @@ type UserRepository struct {
 
 func NewUserRepository(db *pgxpool.Pool) *UserRepository {
 	return &UserRepository{db: db}
+}
+
+func (r *UserRepository) scanUser(row pgx.Row) (*domain.User, error) {
+	user := &domain.User{}
+	var phone, avatarURL, passwordHash, googleID pgtype.Text
+
+	err := row.Scan(
+		&user.ID,
+		&user.Email,
+		&user.Name,
+		&phone,
+		&avatarURL,
+		&passwordHash,
+		&googleID,
+		&user.Role,
+		&user.CreatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+
+	user.Phone = phone.String
+	user.AvatarURL = avatarURL.String
+	user.PasswordHash = passwordHash.String
+	user.GoogleID = googleID.String
+
+	return user, nil
 }
 
 func (r *UserRepository) FindByEmail(ctx context.Context, email string) (*domain.User, error) {
@@ -112,6 +143,35 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
          RETURNING id, created_at`,
 		user.Email, user.Name, user.Phone, user.AvatarURL, user.PasswordHash, user.GoogleID, user.Role,
 	).Scan(&user.ID, &user.CreatedAt)
+}
+
+func (r *UserRepository) UpdateProfile(ctx context.Context, userID string, req domain.UpdateProfileRequest) (*domain.User, error) {
+	row := r.db.QueryRow(ctx, `
+        UPDATE users
+        SET
+            name   = CASE WHEN $1 != '' THEN $1 ELSE name END,
+            phone  = CASE WHEN $2 != '' THEN $2 ELSE phone END
+        WHERE id = $3
+        RETURNING id, email, name, phone, avatar_url, password_hash, google_id, role, created_at
+    `, req.Name, req.Phone, userID)
+
+	return r.scanUser(row)
+}
+
+func (r *UserRepository) UpdatePassword(ctx context.Context, userID string, hashedPassword string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE users SET password_hash = $1 WHERE id = $2`,
+		hashedPassword, userID,
+	)
+	return err
+}
+
+func (r *UserRepository) UpdateEmail(ctx context.Context, userID string, email string) error {
+	_, err := r.db.Exec(ctx,
+		`UPDATE users SET email = $1 WHERE id = $2`,
+		email, userID,
+	)
+	return err
 }
 
 // UpsertGoogleUser handles both new Google users and existing ones

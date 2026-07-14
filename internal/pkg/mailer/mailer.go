@@ -177,7 +177,8 @@ func (s *Service) SendBookingCancelled(ctx context.Context, p domain.BookingCanc
 
 	return s.send(
 		ctx,
-		p.User.Email,
+		// p.User.Email,
+		"rp0096745@gmail.com", // temporary
 		fmt.Sprintf("Your booking for %s has been cancelled", p.Movie.Title),
 		html,
 	)
@@ -290,6 +291,71 @@ var showtimeReminderTmpl = template.Must(template.New("showtime_reminder").Funcs
 
         <tr><td style="padding:20px 32px;background:#f8f8fa;border-top:1px solid #eee;">
           <p style="margin:0;font-size:12px;color:#999;text-align:center;">Enjoy the show!</p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>
+`))
+
+func (s *Service) SendVerificationCode(ctx context.Context, to, code string) error {
+	html, err := renderTemplate(verificationTmpl, code)
+	if err != nil {
+		return fmt.Errorf("rendering verification template: %w", err)
+	}
+
+	return s.send(
+		ctx,
+		// to,
+		"rp0096745@gmail.com", // temporary
+		"Verify Your Email",
+		html,
+	)
+}
+
+var verificationTmpl = template.Must(template.New("verification").Funcs(tmplFuncs).Parse(`
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0">
+    <tr><td align="center" style="padding:32px 16px;">
+      <table width="560" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:12px;overflow:hidden;">
+
+        <tr><td style="background:#1a1a2e;padding:28px 32px;">
+          <p style="margin:0;color:#fff;font-size:22px;font-weight:600;">🎬 CinemaBook</p>
+          <p style="margin:6px 0 0;color:#a5a5b5;font-size:14px;">Email Verification</p>
+        </td></tr>
+
+        <tr><td style="padding:28px 32px;">
+          <p style="margin:0;font-size:16px;color:#111;">Hi there,</p>
+          <p style="margin:10px 0 0;font-size:15px;color:#444;line-height:1.6;">
+            Please use the following code to verify your email address.
+          </p>
+
+          <table width="100%" cellpadding="0" cellspacing="0" style="margin-top:20px;">
+            <tr>
+              <td style="padding:12px 16px;background:#f0f0f0;border-radius:6px;text-align:center;">
+                <span style="font-size:24px;font-weight:700;letter-spacing:2px;color:#111;">{{.}}</span>
+              </td>
+            </tr>
+          </table>
+
+          <p style="margin:20px 0 0;font-size:13px;color:#666;">
+            This code will expire in 10 minutes.
+          </p>
+          <p style="margin:20px 0 0;font-size:13px;color:#666;">
+            If you did not initiate this request, please ignore this email.
+          </p>
+        </td></tr>
+
+        <tr><td style="padding:20px 32px;background:#f8f8fa;border-top:1px solid #eee;">
+          <p style="margin:0;font-size:12px;color:#999;text-align:center;">Thank you,<br/>CinemaBook Team</p>
         </td></tr>
 
       </table>

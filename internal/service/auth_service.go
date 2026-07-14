@@ -8,10 +8,12 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"math/big"
 	"time"
 
 	"cinemabooking/internal/config"
 	"cinemabooking/internal/domain"
+	"cinemabooking/internal/pkg/mailer"
 	repositories "cinemabooking/internal/repository"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -32,12 +34,14 @@ type Claims struct {
 }
 
 type AuthService struct {
-	repo   *repositories.UserRepository
-	config *config.Config
+	repo                  *repositories.UserRepository
+	config                *config.Config
+	emailVerificationRepo repositories.EmailVerificationRepository
+	mailer                *mailer.Service
 }
 
-func NewAuthService(repo *repositories.UserRepository, cfg *config.Config) *AuthService {
-	return &AuthService{repo: repo, config: cfg}
+func NewAuthService(repo *repositories.UserRepository, cfg *config.Config, emailVerificationRepo repositories.EmailVerificationRepository, mailer *mailer.Service) *AuthService {
+	return &AuthService{repo: repo, config: cfg, emailVerificationRepo: emailVerificationRepo, mailer: mailer}
 }
 
 // Register creates a new email/password user
@@ -143,6 +147,97 @@ func (s *AuthService) Logout(ctx context.Context, rawRefreshToken string) error 
 	return s.repo.DeleteRefreshToken(ctx, hashToken(rawRefreshToken))
 }
 
+func (s *AuthService) UpdateProfile(ctx context.Context, userID string, req domain.UpdateProfileRequest) (*domain.User, error) {
+	if req.Name == "" && req.Phone == "" {
+		return nil, domain.NewAppError(400, "at least one field required")
+	}
+
+	user, err := s.repo.UpdateProfile(ctx, userID, req)
+	if err != nil {
+		return nil, fmt.Errorf("updating profile: %w", err)
+	}
+
+	return user, nil
+}
+
+func (s *AuthService) ChangePassword(ctx context.Context, userID string, req domain.ChangePasswordRequest) error {
+	// confirm passwords match
+	if req.NewPassword != req.ConfirmPassword {
+		return domain.NewAppError(400, "passwords do not match")
+	}
+
+	// load user to verify current password
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	// Google OAuth users have no password
+	if user.PasswordHash == "" {
+		return domain.NewAppError(400, "account uses Google sign-in — password cannot be changed")
+	}
+
+	// verify current password
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.CurrentPassword)); err != nil {
+		return domain.NewAppError(401, "current password is incorrect")
+	}
+
+	// prevent reusing the same password
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.NewPassword)); err == nil {
+		return domain.NewAppError(400, "new password must be different from current password")
+	}
+
+	// hash new password
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hashing password: %w", err)
+	}
+
+	return s.repo.UpdatePassword(ctx, userID, string(hashed))
+}
+
+// Updating email with email OTP based with redis
+func (s *AuthService) UpdateEmail(ctx context.Context, userID string, newEmail string) error {
+	user, err := s.repo.FindByID(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if user.Email == newEmail {
+		return domain.NewAppError(400, "new email must be different from current email")
+	}
+
+	existing, err := s.repo.FindByEmail(ctx, newEmail)
+	if err == nil && existing != nil {
+		return domain.NewAppError(409, "email already in use")
+	}
+
+	code := generateVerificationCode()
+
+	if err := s.emailVerificationRepo.SetOTP(ctx, userID, newEmail, code, 15*time.Minute); err != nil {
+		return err
+	}
+
+	return s.mailer.SendVerificationCode(ctx, newEmail, code)
+}
+
+func (s *AuthService) VerifyEmailChange(ctx context.Context, userID, code string) error {
+	newEmail, storedCode, err := s.emailVerificationRepo.GetOTP(ctx, userID)
+	if err != nil {
+		return domain.NewAppError(400, err.Error())
+	}
+
+	if storedCode != code {
+		return domain.NewAppError(400, "invalid verification code")
+	}
+
+	// Delete first — prevent reuse even if UpdateEmail fails
+	if err := s.emailVerificationRepo.DeleteOTP(ctx, userID); err != nil {
+		return err
+	}
+
+	return s.repo.UpdateEmail(ctx, userID, newEmail)
+}
+
 // ValidateAccessToken parses and validates a JWT access token
 func (s *AuthService) ValidateAccessToken(tokenString string) (*Claims, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (interface{}, error) {
@@ -217,4 +312,12 @@ func (s *AuthService) generateRefreshToken(ctx context.Context, userID string) (
 func hashToken(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])
+}
+
+func generateVerificationCode() string {
+	n, err := rand.Int(rand.Reader, big.NewInt(1_000_000))
+	if err != nil {
+		panic(err) // crypto/rand failure is unrecoverable
+	}
+	return fmt.Sprintf("%06d", n)
 }

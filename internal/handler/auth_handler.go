@@ -211,6 +211,78 @@ func (h *AuthHandler) GetUserProfile(c *gin.Context) {
 	c.JSON(http.StatusOK, domain.OK(user))
 }
 
+// PUT /api/v1/users/profile
+func (h *AuthHandler) UpdateProfile(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	var req domain.UpdateProfileRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, domain.Fail[any](err.Error()))
+		return
+	}
+
+	user, err := h.authService.UpdateProfile(c.Request.Context(), userID, req)
+	if err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, domain.OK(user.PublicProfile()))
+}
+
+// PUT /api/v1/users/change-password
+func (h *AuthHandler) ChangePassword(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	var req domain.ChangePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, domain.Fail[any](err.Error()))
+		return
+	}
+
+	if err := h.authService.ChangePassword(c.Request.Context(), userID, req); err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, domain.OK[any](nil))
+}
+
+// PUT /api/v1/users/email
+func (h *AuthHandler) UpdateEmail(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	var req domain.UpdateEmailRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, domain.Fail[any](err.Error()))
+		return
+	}
+
+	if err := h.authService.UpdateEmail(c.Request.Context(), userID, req.Email); err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, domain.OK[any](nil))
+}
+
+func (h *AuthHandler) VerifyEmailChange(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	var req domain.VerifyEmailChangeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, domain.Fail[any](err.Error()))
+		return
+	}
+
+	if err := h.authService.VerifyEmailChange(c.Request.Context(), userID, req.Code); err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, domain.OK[any](nil))
+}
+
 func (h *AuthHandler) Me(c *gin.Context) {
 	// UserID is set by the auth middleware
 	userID := c.GetString("user_id")
