@@ -143,8 +143,22 @@ func (s *AuthService) RefreshTokens(ctx context.Context, rawRefreshToken string)
 }
 
 // Logout invalidates the refresh token
-func (s *AuthService) Logout(ctx context.Context, rawRefreshToken string) error {
-	return s.repo.DeleteRefreshToken(ctx, hashToken(rawRefreshToken))
+func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
+	hash := hashToken(refreshToken)
+
+	if err := s.repo.DeleteRefreshToken(ctx, hash); err != nil {
+		return fmt.Errorf("deleting refresh token: %w", err)
+	}
+
+	return nil
+}
+
+func (s *AuthService) LogoutAll(ctx context.Context, userID string) error {
+	if err := s.repo.DeleteAllRefreshTokens(ctx, userID); err != nil {
+		return fmt.Errorf("deleting all refresh tokens: %w", err)
+	}
+
+	return nil
 }
 
 func (s *AuthService) UpdateProfile(ctx context.Context, userID string, req domain.UpdateProfileRequest) (*domain.User, error) {

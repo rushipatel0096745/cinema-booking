@@ -170,9 +170,12 @@ func main() {
 		auth.POST("/register", authHandler.Register)
 		auth.POST("/login", authHandler.Login)
 		auth.POST("/refresh", authHandler.Refresh)
-		auth.POST("/logout", authHandler.Logout)
 		auth.GET("/google/login", authHandler.GoogleLogin)
 		auth.GET("/google/callback", authHandler.GoogleCallback)
+
+		auth.POST("/logout", middleware.AuthMiddleware(authService), authHandler.Logout)
+		auth.POST("/logout-all", middleware.AuthMiddleware(authService), authHandler.LogoutAll)
+		auth.GET("/me", middleware.AuthMiddleware(authService), authHandler.Me)
 	}
 
 	users := r.Group("/users", middleware.AuthMiddleware(authService))

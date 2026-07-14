@@ -190,10 +190,23 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 
-	_ = h.authService.Logout(c.Request.Context(), req.RefreshToken)
-	c.JSON(http.StatusOK, domain.OK(gin.H{
-		"message": "logged out successfully",
-	}))
+	if err := h.authService.Logout(c.Request.Context(), req.RefreshToken); err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, domain.OK[any](nil))
+}
+
+func (h *AuthHandler) LogoutAll(c *gin.Context) {
+	userID := c.GetString("user_id")
+
+	if err := h.authService.LogoutAll(c.Request.Context(), userID); err != nil {
+		handleError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, domain.OK[any](nil))
 }
 
 func (h *AuthHandler) GetUserProfile(c *gin.Context) {
