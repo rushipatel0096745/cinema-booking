@@ -144,6 +144,7 @@ func main() {
 			"http://localhost:5174",                       // Vite
 			"http://localhost:3000",                       // React
 			"https://cinema-booking-rushikesh.vercel.app", // vercel deployment
+			"https://cinema-booking-admin.vercel.app",     // vercel deployment for admin
 		},
 		AllowMethods: []string{
 			"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS",
