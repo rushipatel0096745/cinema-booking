@@ -141,6 +141,7 @@ func main() {
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{
 			"http://localhost:5173",                       // Vite
+			"http://localhost:5174",                       // Vite
 			"http://localhost:3000",                       // React
 			"https://cinema-booking-rushikesh.vercel.app", // vercel deployment
 		},
@@ -207,6 +208,7 @@ func main() {
 
 		// for theatres
 		api.GET("/theatres", theatreHandler.ListTheatres)
+		api.GET("/theatres/cities", theatreHandler.ListCities)
 		api.GET("/theatres/:id", theatreHandler.GetTheatre)
 		api.GET("/theatres/:id/halls", theatreHandler.GetHalls)
 		api.POST("/theatres", theatreHandler.CreateTheatre)

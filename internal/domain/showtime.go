@@ -17,8 +17,8 @@ type Showtime struct {
 	Movie       *Movie   `json:"movie,omitempty"`
 	Hall        *Hall    `json:"hall,omitempty"`
 	Theatre     *Theatre `json:"theatre,omitempty"`
-	AvailSeats  int      `json:"available_seats,omitempty"`
-	BookedSeats int      `json:"booked_seats,omitempty"`
+	AvailSeats  int      `json:"available_seats"`
+	BookedSeats int      `json:"booked_seats"`
 }
 
 type MovieShowtimesResponse struct {

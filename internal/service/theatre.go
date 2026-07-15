@@ -5,6 +5,7 @@ import (
 	repositories "cinemabooking/internal/repository"
 	"context"
 	"errors"
+	"fmt"
 )
 
 var ErrTheatreNotFound = errors.New("theatre not found")
@@ -17,8 +18,15 @@ func NewTheatreService(repo repositories.TheatreRepository) *TheatreService {
 	return &TheatreService{repo: repo}
 }
 
+// ListTheatres returns paginated theatres, filtered by city.
+// Halls are NOT included here — they are loaded on-demand via GetTheatre.
 func (s *TheatreService) ListTheatres(ctx context.Context, filter domain.TheatreFilter) ([]domain.Theatre, int, error) {
 	return s.repo.FindAll(ctx, filter)
+}
+
+// ListCities returns all unique cities where theatres are located.
+func (s *TheatreService) ListCities(ctx context.Context) ([]string, error) {
+	return s.repo.FindAllCities(ctx)
 }
 
 // GetTheatre returns the theatre with its halls attached — this is the "on demand"
@@ -82,5 +90,16 @@ func (s *TheatreService) CreateHall(ctx context.Context, theatreID string, req *
 		}
 		return nil, err
 	}
+
+	// auto-generate seat definitions immediately after hall creation
+	if err := s.repo.GenerateSeatDefinitions(
+		ctx,
+		created.ID,
+		created.TotalRows,
+		created.TotalCols,
+	); err != nil {
+		return nil, fmt.Errorf("generating seat definitions: %w", err)
+	}
+
 	return created, nil
 }

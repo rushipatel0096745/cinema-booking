@@ -33,6 +33,15 @@ func (h *TheatreHandler) ListTheatres(c *gin.Context) {
 	c.JSON(http.StatusOK, domain.OKList(theatres, domain.NewMeta(page, limit, total)))
 }
 
+func (h *TheatreHandler) ListCities(c *gin.Context) {
+	cities, err := h.theatreService.ListCities(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, domain.Fail[any](err.Error()))
+		return
+	}
+	c.JSON(http.StatusOK, domain.OK(cities))
+}
+
 func (h *TheatreHandler) GetTheatre(c *gin.Context) {
 	id := c.Param("id")
 	theatre, err := h.theatreService.GetTheatre(c.Request.Context(), id)

@@ -31,6 +31,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -245,7 +246,7 @@ func (r *ShowtimeRepository) Delete(ctx context.Context, id string) error {
 }
 
 func (r *ShowtimeRepository) GenerateSeats(ctx context.Context, showtimeID string, hallID string, basePrice float64) error {
-	_, err := r.db.Exec(ctx, `
+	tag, err := r.db.Exec(ctx, `
 		INSERT INTO showtime_seats (showtime_id, seat_def_id, price, status)
 		SELECT $1, sd.id,
 		       CASE sd.seat_type
@@ -259,7 +260,16 @@ func (r *ShowtimeRepository) GenerateSeats(ctx context.Context, showtimeID strin
 		ON CONFLICT (showtime_id, seat_def_id) DO NOTHING`,
 		showtimeID, basePrice, hallID,
 	)
-	return err
+	if err != nil {
+		slog.Error("error generating seats for showtime", slog.String("showtime_id", showtimeID), slog.String("hall_id", hallID), slog.Any("error", err))
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		slog.Warn("no seat_definitions found for hall — showtime_seats not created", slog.String("hall_id", hallID), slog.String("showtime_id", showtimeID))
+		return fmt.Errorf("hall '%s' has no seat definitions; create seats for the hall before scheduling a showtime", hallID)
+	}
+	slog.Info("seat generation success", slog.String("showtime_id", showtimeID), slog.String("hall_id", hallID), slog.Float64("base_price", basePrice), slog.Int64("rows_inserted", tag.RowsAffected()))
+	return nil
 }
 
 func (r *ShowtimeRepository) FindSeatMap(ctx context.Context, showtimeID string) (*domain.SeatMap, error) {

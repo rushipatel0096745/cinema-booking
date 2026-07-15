@@ -16,8 +16,10 @@ type TheatreRepository interface {
 	FindByID(ctx context.Context, id string) (*domain.Theatre, error)
 	FindHalls(ctx context.Context, theatreID string) ([]domain.Hall, error)
 	FindHallByID(ctx context.Context, hallID string) (*domain.Hall, error)
+	FindAllCities(ctx context.Context) ([]string, error)
 	Create(ctx context.Context, theatre *domain.Theatre) (*domain.Theatre, error)
 	CreateHall(ctx context.Context, hall *domain.Hall) (*domain.Hall, error)
+	GenerateSeatDefinitions(ctx context.Context, hallID string, totalRows int, totalCols int) error
 }
 
 type theatreRepository struct {
@@ -78,6 +80,26 @@ func (r *theatreRepository) FindByID(ctx context.Context, id string) (*domain.Th
 		return nil, err
 	}
 	return t, nil
+}
+
+func (r *theatreRepository) FindAllCities(ctx context.Context) ([]string, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT DISTINCT city FROM theatres ORDER BY city ASC`,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	cities := []string{}
+	for rows.Next() {
+		var city string
+		if err := rows.Scan(&city); err != nil {
+			return nil, err
+		}
+		cities = append(cities, city)
+	}
+	return cities, rows.Err()
 }
 
 func (r *theatreRepository) FindHalls(ctx context.Context, theatreID string) ([]domain.Hall, error) {
@@ -148,4 +170,52 @@ func (r *theatreRepository) CreateHall(ctx context.Context, hall *domain.Hall) (
 	}
 	hall.TotalSeats = hall.TotalRows * hall.TotalCols
 	return hall, nil
+}
+
+func (r *theatreRepository) GenerateSeatDefinitions(ctx context.Context, hallID string, totalRows int, totalCols int) error {
+	totalSeats := totalRows * totalCols
+
+	// Pre-allocate slices — one entry per seat
+	hallIDs := make([]string, 0, totalSeats)
+	rowLabels := make([]string, 0, totalSeats)
+	colNumbers := make([]int, 0, totalSeats)
+	seatTypes := make([]string, 0, totalSeats)
+
+	for r := 0; r < totalRows; r++ {
+		rowLabel := string(rune('A' + r))
+		st := seatTypeForRow(rowLabel)
+		for col := 1; col <= totalCols; col++ {
+			hallIDs = append(hallIDs, hallID)
+			rowLabels = append(rowLabels, rowLabel)
+			colNumbers = append(colNumbers, col)
+			seatTypes = append(seatTypes, st)
+		}
+	}
+
+	// Single round-trip: UNNEST expands the arrays into rows server-side
+	_, err := r.db.Exec(ctx, `
+		INSERT INTO seat_definitions (hall_id, row_label, col_number, seat_type)
+		SELECT
+			UNNEST($1::uuid[]),
+			UNNEST($2::text[]),
+			UNNEST($3::int[]),
+			UNNEST($4::text[])
+		ON CONFLICT (hall_id, row_label, col_number) DO NOTHING`,
+		hallIDs, rowLabels, colNumbers, seatTypes,
+	)
+	if err != nil {
+		return fmt.Errorf("generating seat definitions: %w", err)
+	}
+	return nil
+}
+
+func seatTypeForRow(rowLabel string) string {
+	switch rowLabel {
+	case "A", "B":
+		return domain.SeatTypeRecliner
+	case "C", "D":
+		return domain.SeatTypePremium
+	default:
+		return domain.SeatTypeStandard
+	}
 }

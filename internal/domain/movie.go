@@ -56,6 +56,7 @@ type UpdateMovieRequest struct {
 	Genre       []string `json:"genre"         binding:"omitempty,min=1"`
 	Language    string   `json:"language"      binding:"omitempty"`
 	PosterURL   string   `json:"poster_url"    binding:"omitempty,url"`
+	BackdropURL string   `json:"backdrop_url" binding:"omitempty,url"`
 	TrailerURL  string   `json:"trailer_url"   binding:"omitempty,url"`
 	ReleaseDate string   `json:"release_date"  binding:"omitempty"`
 }

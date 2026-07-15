@@ -112,7 +112,8 @@ func (s *ShowtimeService) CreateShowtime(ctx context.Context, req domain.CreateS
 }
 
 // UpdateShowtime applies partial updates — only non-zero fields are changed.
-// Recalculates ends_at if starts_at changes.
+// Recalculates ends_at only when starts_at actually differs from the current value.
+// Short-circuits with no DB write when nothing changed.
 func (s *ShowtimeService) UpdateShowtime(ctx context.Context, id string, req domain.UpdateShowtimeRequest) (*domain.Showtime, error) {
 	showtime, err := s.repo.FindByID(ctx, id)
 	if err != nil {
@@ -124,6 +125,8 @@ func (s *ShowtimeService) UpdateShowtime(ctx context.Context, id string, req dom
 		return nil, domain.NewAppError(409, "cannot update a showtime that has already started")
 	}
 
+	changed := false
+
 	if req.StartsAt != "" {
 		startsAt, err := time.Parse(time.RFC3339, req.StartsAt)
 		if err != nil {
@@ -133,33 +136,42 @@ func (s *ShowtimeService) UpdateShowtime(ctx context.Context, id string, req dom
 			return nil, domain.NewAppError(400, "starts_at must be in the future")
 		}
 
-		// recalculate ends_at using the movie's duration
-		movie, err := s.movieRepo.FindByID(ctx, showtime.MovieID)
-		if err != nil {
-			return nil, err
-		}
+		// Only do the expensive movie-fetch + conflict check when the time actually changed
+		if !startsAt.Equal(showtime.StartsAt) {
+			movie, err := s.movieRepo.FindByID(ctx, showtime.MovieID)
+			if err != nil {
+				return nil, err
+			}
 
-		newEndsAt := startsAt.Add(time.Duration(movie.DurationMin) * time.Minute)
+			newEndsAt := startsAt.Add(time.Duration(movie.DurationMin) * time.Minute)
 
-		// re-check conflict excluding this showtime itself
-		conflict, err := s.repo.HasConflict(ctx, showtime.HallID, startsAt, newEndsAt, &id)
-		if err != nil {
-			return nil, err
-		}
-		if conflict {
-			return nil, domain.NewAppError(409, "hall has a conflicting showtime in the new time slot")
-		}
+			conflict, err := s.repo.HasConflict(ctx, showtime.HallID, startsAt, newEndsAt, &id)
+			if err != nil {
+				return nil, err
+			}
+			if conflict {
+				return nil, domain.NewAppError(409, "hall has a conflicting showtime in the new time slot")
+			}
 
-		showtime.StartsAt = startsAt
-		showtime.EndsAt = newEndsAt
+			showtime.StartsAt = startsAt
+			showtime.EndsAt = newEndsAt
+			changed = true
+		}
 	}
 
-	if req.BasePrice > 0 {
+	if req.BasePrice > 0 && req.BasePrice != showtime.BasePrice {
 		showtime.BasePrice = req.BasePrice
+		changed = true
 	}
 
-	if req.IsActive != nil {
+	if req.IsActive != nil && *req.IsActive != showtime.IsActive {
 		showtime.IsActive = *req.IsActive
+		changed = true
+	}
+
+	// Nothing actually changed — return current state without a DB write
+	if !changed {
+		return showtime, nil
 	}
 
 	updated, err := s.repo.Update(ctx, id, showtime)

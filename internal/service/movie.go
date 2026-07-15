@@ -100,6 +100,9 @@ func (s *MovieService) UpdateMovie(ctx context.Context, id string, req *domain.U
 	if req.PosterURL != "" {
 		movie.PosterURL = req.PosterURL
 	}
+	if req.BackdropURL != "" {
+		movie.BackdropURL = req.BackdropURL
+	}
 	if req.TrailerURL != "" {
 		movie.TrailerURL = req.TrailerURL
 	}

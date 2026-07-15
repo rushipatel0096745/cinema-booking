@@ -156,8 +156,8 @@ func (r *MovieRepository) FindWithFilters(ctx context.Context, f domain.MovieFil
 
 func (r *MovieRepository) Create(ctx context.Context, movie *domain.Movie) error {
 	return r.db.QueryRow(ctx,
-		`INSERT INTO movies (title, description, duration_mins, genre, language, poster_url, backdrop_url, trailer_url, release_date, tmdb_id)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		`INSERT INTO movies (title, description, duration_mins, genre, language, poster_url, backdrop_path, trailer_url, release_date, tmdb_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
          RETURNING id, rating, created_at`,
 		movie.Title, movie.Description, movie.DurationMin, movie.Genre, movie.Language,
 		movie.PosterURL, movie.BackdropURL, movie.TrailerURL, movie.ReleaseDate, movie.TmdbID,
@@ -167,10 +167,10 @@ func (r *MovieRepository) Create(ctx context.Context, movie *domain.Movie) error
 func (r *MovieRepository) Update(ctx context.Context, movie *domain.Movie) error {
 	tag, err := r.db.Exec(ctx,
 		`UPDATE movies SET title = $1, description = $2, duration_mins = $3, genre = $4,
-            language = $5, poster_url = $6, trailer_url = $7, release_date = $8
-         WHERE id = $9`,
+            language = $5, poster_url = $6, backdrop_path = $7, trailer_url = $8, release_date = $9
+         WHERE id = $10`,
 		movie.Title, movie.Description, movie.DurationMin, movie.Genre, movie.Language,
-		movie.PosterURL, movie.TrailerURL, movie.ReleaseDate, movie.ID,
+		movie.PosterURL, movie.BackdropURL, movie.TrailerURL, movie.ReleaseDate, movie.ID,
 	)
 	if err != nil {
 		return err
